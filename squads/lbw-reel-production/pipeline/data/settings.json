@@ -1,0 +1,47 @@
+{
+  "finalOutputDirectory": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/ENTREGAS/REELS",
+  "folderNamePattern": "AAAA-MM-DD__Videos WB - NN-tema",
+  "fileNamePattern": "reel.mp4",
+  "maximumDurationSeconds": 180,
+  "minimumTailAfterLastWordMs": 100,
+  "maximumStartDifferenceMs": 100,
+  "videoWidth": 1080,
+  "videoHeight": 1920,
+  "framesPerSecond": 30,
+  "instagramCover": {
+    "required": true,
+    "mode": "dedicated",
+    "format": "jpg",
+    "width": 1080,
+    "height": 1920,
+    "safeZone": {
+      "xMin": 55,
+      "xMax": 1025,
+      "yMin": 250,
+      "yMax": 1660
+    },
+    "hookWords": {
+      "minimum": 3,
+      "maximum": 6
+    },
+    "defaultPortraitTimeSeconds": 2,
+    "selectionRule": "Gerar arte dedicada; usar apenas o retrato de um quadro do primeiro terço, com rosto visível, olhos abertos e expressão clara",
+    "courseStyles": {
+      "white-belt": { "background": "#FFFFFF", "accent": "#0757FF", "ink": "#062B61", "highlight": "#F4C430" },
+      "yellow-belt": { "background": "#F4C430", "accent": "#FFFFFF", "ink": "#062B61", "highlight": "#0757FF" },
+      "green-belt": { "background": "#178447", "accent": "#F4C430", "ink": "#FFFFFF", "highlight": "#FFFFFF" },
+      "black-belt": { "background": "#111827", "accent": "#F4C430", "ink": "#FFFFFF", "highlight": "#0757FF" }
+    }
+  },
+  "captionSourcePriority": [
+    "json3",
+    "vtt",
+    "local-word-alignment"
+  ],
+  "deliverOnly": [
+    "mp4",
+    "transcript.md",
+    "capa.jpg"
+  ],
+  "targetDurationSeconds": 45
+}

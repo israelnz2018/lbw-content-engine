@@ -1,0 +1,25 @@
+{
+  "minimumSlides": 6,
+  "maximumSlides": 8,
+  "width": 1080,
+  "height": 1350,
+  "dateFormat": "YYYY-MM-DD",
+  "instagramFormat": "png",
+  "linkedinFormat": "pdf",
+  "folderNamePattern": "YYYY-MM-DD__Tipo - NN-tema",
+  "fileNamePattern": "slide-NN",
+  "deliverOnly": [
+    "png",
+    "pdf",
+    "conteudo.md"
+  ],
+  "outputDirectories": {
+    "feed": "Feed",
+    "reels": "Reels",
+    "pdf": "PDF",
+    "textos": "Textos"
+  },
+  "video": {
+    "secondsPerSlide": 5
+  }
+}

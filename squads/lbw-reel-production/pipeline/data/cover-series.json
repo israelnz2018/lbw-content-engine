@@ -1,0 +1,26 @@
+{
+  "white-belt": {
+    "label": "WHITE BELT",
+    "lastGeneratedEpisode": 2,
+    "nextEpisode": 3,
+    "status": "active"
+  },
+  "yellow-belt": {
+    "label": "YELLOW BELT",
+    "lastGeneratedEpisode": 0,
+    "nextEpisode": 1,
+    "status": "planned"
+  },
+  "green-belt": {
+    "label": "GREEN BELT",
+    "lastGeneratedEpisode": 0,
+    "nextEpisode": 1,
+    "status": "planned"
+  },
+  "black-belt": {
+    "label": "BLACK BELT",
+    "lastGeneratedEpisode": 0,
+    "nextEpisode": 1,
+    "status": "planned"
+  }
+}

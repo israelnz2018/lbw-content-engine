@@ -1,0 +1,13 @@
+name: "LBW Carousel Production Pipeline"
+description: "Transforma transcripts e temas da LBW em carrosséis revisados para Instagram e LinkedIn."
+steps:
+  - carousel-step-01-source-analysis
+  - carousel-step-02-copy
+  - carousel-step-03-visual-plan
+  - carousel-step-04-render
+  - carousel-step-05-review
+  - carousel-step-06-final-approval
+checkpoints:
+  - carousel-step-06-final-approval
+on_reject: carousel-step-03-visual-plan
+max_review_cycles: 3

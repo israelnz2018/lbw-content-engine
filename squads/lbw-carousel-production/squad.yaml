@@ -1,0 +1,23 @@
+name: "LBW Carousel Production"
+description: "Extensão independente para criar, renderizar e revisar carrosséis da LBW para Instagram e LinkedIn."
+icon: "🖼️"
+language: "Português (Brasil)"
+skills:
+  - web_search
+  - web_fetch
+  - apify
+  - pessoa-generator
+  - image-fetcher
+  - image-ai-generator
+  - canva
+  - instagram-publisher
+  - blotato
+data:
+  - pipeline/data/settings.json
+  - pipeline/data/prompt-mestre-carrossel.md
+  - pipeline/data/quality-criteria.md
+  - automation/review-checklist.md
+  - automation/carousel-input.example.json
+pipeline: pipeline/pipeline.yaml
+checkpoints:
+  - carousel-step-06-final-approval

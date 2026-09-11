@@ -1,0 +1,33 @@
+{
+  "sourceVideo": "C:/caminho/video-original.mp4",
+  "logoPath": "C:/caminho/logo-oficial.png",
+  "captionsAss": "C:/caminho/captions.ass",
+  "outputRoot": "C:/caminho/output-da-execucao",
+  "outputName": "YYYY-MM-DD__tema__instagram-reel.mp4",
+  "clipStart": "00:00:00",
+  "duration": 34,
+  "titleLine1": "TITULO CURTO",
+  "titleLine2": "SEGUNDA LINHA?",
+  "brandText": "LBW - EDUCAÇÃO PELO TRABALHO",
+  "layout": {
+    "slideWidth": 1000,
+    "slideHeight": 562,
+    "slideX": 40,
+    "slideY": 330,
+    "faceCropWidth": 290,
+    "faceCropHeight": 290,
+    "faceCropX": 990,
+    "faceCropY": 390,
+    "faceSize": 600,
+    "faceX": 240,
+    "faceY": 940,
+    "coverX": 810,
+    "coverY": 628,
+    "coverWidth": 230,
+    "coverHeight": 229,
+    "coverColor": "0xEEEEEE",
+    "slideBarY": 853,
+    "slideBarHeight": 39,
+    "footerY": 1585
+  }
+}

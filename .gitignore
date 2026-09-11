@@ -1,0 +1,55 @@
+# ============================================================
+# LBW Content Engine — o que NÃO vai para o GitHub.
+#
+# Regra: só sobe o motor (squads, renderizadores, prompts, marca).
+# Tudo que é pesado, gerado, privado ou reinstalável fica só na máquina.
+# Nada aqui é apagado — o git apenas ignora.
+# ============================================================
+
+# ---- Credenciais. Nunca, em hipótese alguma. ----
+.env
+.env.*
+secrets/
+*.key
+*.pem
+*-firebase-adminsdk-*.json
+CONFIGURACAO-ENV.txt
+
+# ---- Reinstalável ----
+node_modules/
+package-lock.json
+
+# ---- Material de origem (vídeos longos, 271 MB e subindo) ----
+ENTRADA/
+
+# ---- Saída gerada: se regenera rodando os squads ----
+ENTREGAS/
+_producao/
+_build/
+
+# ---- Acervo e outros projetos que moram nesta pasta ----
+"Digital LBW"/
+Digital LBW/
+dashboard/
+_tmp_logo_inspect/
+
+# ---- Proteção dupla: mídia pesada, venha de onde vier ----
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.mp3
+*.zip
+*.docx
+*.pptx
+*.xlsx
+
+# Exceção: a marca e a biblioteca de pessoas são leves e fazem parte do motor.
+!assets/marca/*.png
+!assets/pessoas/**/*.png
+
+# ---- Ruído do sistema ----
+.DS_Store
+Thumbs.db
+*.log

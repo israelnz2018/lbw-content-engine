@@ -1,0 +1,23 @@
+name: "LBW Reel Production"
+description: "Extensão independente para analisar, editar, renderizar e revisar Reels verticais da LBW sem alterar o squad original."
+icon: "🎞️"
+language: "Português (Brasil)"
+skills:
+  - web_search
+  - web_fetch
+  - pessoa-generator
+  - image-fetcher
+  - instagram-publisher
+  - blotato
+data:
+  - pipeline/data/settings.json
+  - pipeline/data/prompt-mestre-reel-aula-horizontal.md
+  - pipeline/data/quality-criteria.md
+  - pipeline/data/cover-standard.md
+  - pipeline/data/cover-series.json
+  - pipeline/data/technical-terms.json
+  - automation/review-checklist.md
+  - automation/reel-input.example.json
+pipeline: pipeline/pipeline.yaml
+checkpoints:
+  - video-step-06-final-approval

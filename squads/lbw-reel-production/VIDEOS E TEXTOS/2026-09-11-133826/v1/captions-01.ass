@@ -1,0 +1,23 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: LBW,Arial,49,&H0000D7FF,&H00FFFFFF,&H00612B06,&H00000000,-1,0,0,0,100,100,0,0,1,3,2,2,55,55,250,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.14,LBW,,0,0,0,,{\k36}E {\k16}A {\k36}QUESTÃO {\k20}QUE {\k12}A {\k12}GENTE\N{\k20}JÁ {\k40}CONHECE {\k22}MUITO,
+Dialogue: 0,0:00:02.16,0:00:05.14,LBW,,0,0,0,,{\k16}QUE {\k28}É {\k28}FAZER {\k56}RETRABALHO {\k32}E {\k40}PRODUZIR\N{\k28}ITENS {\k70}DEFEITUOSOS,
+Dialogue: 0,0:00:05.16,0:00:07.38,LBW,,0,0,0,,{\k76}NÉ? {\k146}DEFEITO.
+Dialogue: 0,0:00:07.40,0:00:09.62,LBW,,0,0,0,,{\k16}OU {\k16}SEJA, {\k16}UMA {\k24}EMPRESA {\k16}NÃO\N{\k28}É {\k52}PROJETADA {\k16}PARA {\k38}FABRICAR
+Dialogue: 0,0:00:09.64,0:00:12.78,LBW,,0,0,0,,{\k68}DEFEITO, {\k32}MAS {\k40}ALGUMAS {\k36}PESSOAS\N{\k20}A {\k20}SE {\k68}ACOSTUMAM {\k30}TANTO
+Dialogue: 0,0:00:12.80,0:00:16.02,LBW,,0,0,0,,{\k16}COM {\k16}OS {\k68}DEFEITOS {\k20}QUE {\k16}ACHAM\N{\k8}QUE {\k16}ISSO {\k20}FAZ {\k142}PARTE.
+Dialogue: 0,0:00:16.04,0:00:17.54,LBW,,0,0,0,,{\k4}A {\k12}GENTE {\k16}PODE {\k24}ATÉ {\k24}FAZER\N{\k36}PARTE, {\k16}MAS {\k4}É {\k14}UMA
+Dialogue: 0,0:00:17.56,0:00:21.38,LBW,,0,0,0,,{\k64}PORCENTAGEM {\k36}BEM {\k48}POUQUINHA\N{\k16}DE {\k60}DEFEITO, {\k56}MÍNIMA, {\k102}GENTE.
+Dialogue: 0,0:00:21.40,0:00:23.34,LBW,,0,0,0,,{\k12}TEM {\k8}GENTE {\k8}QUE {\k8}SE\N{\k36}ACOSTUMA {\k16}COM {\k106}5%,
+Dialogue: 0,0:00:23.36,0:00:24.74,LBW,,0,0,0,,{\k138}3%.
+Dialogue: 0,0:00:24.76,0:00:27.29,LBW,,0,0,0,,{\k64}É, {\k16}É {\k8}A\N{\k165}ROTINA.

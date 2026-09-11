@@ -1,0 +1,22 @@
+name: "LBW LinkedIn Production"
+description: "Extensão independente para planejar, pesquisar, escrever e revisar posts de LinkedIn da LBW."
+icon: "💼"
+language: "Português (Brasil)"
+skills:
+  - web_search
+  - web_fetch
+  - apify
+  - image-creator
+  - image-ai-generator
+  - image-fetcher
+  - canva
+  - blotato
+data:
+  - pipeline/data/research-brief.md
+  - pipeline/data/domain-framework.md
+  - pipeline/data/quality-criteria.md
+  - pipeline/data/output-examples.md
+  - pipeline/data/anti-patterns.md
+  - pipeline/data/tone-of-voice.md
+pipeline: pipeline/pipeline.yaml
+checkpoints: []

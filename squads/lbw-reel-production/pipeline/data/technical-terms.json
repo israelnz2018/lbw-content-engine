@@ -1,0 +1,49 @@
+{
+  "description": "Dicionário de normalização da legenda para nomes técnicos da LBW. As variações são aplicadas somente ao texto da legenda; o áudio original não é alterado.",
+  "terms": [
+    {
+      "canonical": "LEAN SIX SIGMA",
+      "variants": ["lean six sigma", "lean six-sigma", "lin six sigma", "lincig sigma", "linsic sigma", "linic sigma", "linc sigma", "inc sigma", "lino sigma", "lean sigma", "lin sigma"]
+    },
+    {
+      "canonical": "LEAN_SIX_SIGMA",
+      "variants": ["linico"]
+    },
+    {
+      "canonical": "SIX SIGMA",
+      "variants": ["six sigma", "seis sigma", "se sigma", "seis-signa", "seis siga"]
+    },
+    {
+      "canonical": "LEAN",
+      "variants": ["lean", "lin", "lincig", "linsic", "linic", "liga", "inc"]
+    },
+    {
+      "canonical": "WHITE BELT",
+      "variants": ["white belt", "whitebelt", "whitebuilt", "white bel", "wite belt", "wait belt"]
+    },
+    {
+      "canonical": "YELLOW BELT",
+      "variants": ["yellow belt", "yellowbelt", "yellowbuilt", "yellow bel", "yelow belt"]
+    },
+    {
+      "canonical": "GREEN BELT",
+      "variants": ["green belt", "greenbelt", "greenbuilt", "green bel", "gren belt"]
+    },
+    {
+      "canonical": "BLACK BELT",
+      "variants": ["black belt", "blackbelt", "blackbuilt", "black bel", "blak belt"]
+    },
+    {
+      "canonical": "ASQ",
+      "variants": ["asq", "a sq", "sq"]
+    },
+    {
+      "canonical": "COUNCIL",
+      "variants": ["council", "cancio", "câncio", "counsil"]
+    },
+    {
+      "canonical": "DMAIC",
+      "variants": ["dmaic", "dmai", "dmaiс", "dmac"]
+    }
+  ]
+}

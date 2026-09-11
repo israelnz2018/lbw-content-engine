@@ -1,0 +1,24 @@
+name: "LBW Content Marketing"
+description: "Squad modular para planejar, pesquisar, criar e revisar conteúdo original da LBW para Instagram Reels e LinkedIn Posts."
+icon: "📣"
+language: "Português (Brasil)"
+skills:
+  - web_search
+  - web_fetch
+  - apify
+  - image-creator
+  - image-ai-generator
+  - image-fetcher
+  - canva
+  - instagram-publisher
+  - blotato
+data:
+  - pipeline/data/2026-09-11__prompt-mestre-reel-aula-horizontal.md
+  - pipeline/data/research-brief.md
+  - pipeline/data/domain-framework.md
+  - pipeline/data/quality-criteria.md
+  - pipeline/data/output-examples.md
+  - pipeline/data/anti-patterns.md
+  - pipeline/data/tone-of-voice.md
+pipeline: pipeline/pipeline.yaml
+checkpoints: []

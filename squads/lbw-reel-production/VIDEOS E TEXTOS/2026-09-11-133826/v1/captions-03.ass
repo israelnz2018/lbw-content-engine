@@ -1,0 +1,30 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: LBW,Arial,49,&H0000D7FF,&H00FFFFFF,&H00612B06,&H00000000,-1,0,0,0,100,100,0,0,1,3,2,2,55,55,250,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.42,LBW,,0,0,0,,{\k8}PARA {\k16}VOCÊS {\k20}TEREM\N{\k98}IDEIA,
+Dialogue: 0,0:00:01.44,0:00:04.18,LBW,,0,0,0,,{\k20}A {\k28}FORD {\k52}DEMORAVA {\k20}4 {\k16}ANOS\N{\k8}PARA {\k16}FAZER {\k12}UM {\k102}CARRO.
+Dialogue: 0,0:00:04.20,0:00:06.78,LBW,,0,0,0,,{\k68}QUATRO. {\k28}DESDE\N{\k24}O {\k52}DESIGN {\k86}DELE
+Dialogue: 0,0:00:06.80,0:00:09.74,LBW,,0,0,0,,{\k32}ATÉ {\k16}O {\k20}CARRO {\k28}COMEÇAR {\k4}A\N{\k12}SER {\k52}VENDIDO, {\k32}4 {\k98}ANOS.
+Dialogue: 0,0:00:09.76,0:00:10.82,LBW,,0,0,0,,{\k20}POIS\N{\k86}É.
+Dialogue: 0,0:00:10.84,0:00:13.34,LBW,,0,0,0,,{\k24}QUANDO {\k16}FOI {\k24}FAZER {\k32}ANÁLISE\N{\k40}BMAR {\k12}COM {\k8}A {\k64}TOYOTA, {\k30}ELA
+Dialogue: 0,0:00:13.36,0:00:16.26,LBW,,0,0,0,,{\k44}CONSEGUIA {\k20}FAZER {\k56}ISSO\N{\k20}EM {\k20}DOIS {\k130}ANOS
+Dialogue: 0,0:00:16.28,0:00:19.82,LBW,,0,0,0,,{\k28}E {\k28}ALGUNS {\k32}CARROS\N{\k44}18 {\k222}MESES.
+Dialogue: 0,0:00:19.84,0:00:22.66,LBW,,0,0,0,,{\k32}4 {\k32}ANOS {\k20}PARA {\k40}18\N{\k40}MESES, {\k118}GENTE.
+Dialogue: 0,0:00:22.68,0:00:24.78,LBW,,0,0,0,,{\k28}MESMA {\k44}EMPRESA, {\k24}MESMO {\k24}MESMO\N{\k28}ESTILO, {\k20}FAZ {\k20}MESMO {\k22}CARRO
+Dialogue: 0,0:00:24.80,0:00:26.66,LBW,,0,0,0,,{\k16}QUE {\k16}TODO {\k20}MUNDO\N{\k134}COMPRA,
+Dialogue: 0,0:00:26.68,0:00:28.10,LBW,,0,0,0,,{\k32}USANDO {\k36}INCLUSIVE {\k20}ATÉ\N{\k12}ÀS {\k16}VEZES {\k12}OS {\k14}MESMOS
+Dialogue: 0,0:00:28.12,0:00:29.90,LBW,,0,0,0,,{\k178}FORNECEDORES,
+Dialogue: 0,0:00:29.92,0:00:32.06,LBW,,0,0,0,,{\k20}NÉ, {\k24}DAS {\k40}MATÉRIAS,\N{\k24}DOS {\k106}PRODUTOS.
+Dialogue: 0,0:00:32.08,0:00:33.02,LBW,,0,0,0,,{\k94}OLHA
+Dialogue: 0,0:00:33.04,0:00:35.42,LBW,,0,0,0,,{\k20}QUE {\k28}COISA, {\k52}GENTE. {\k12}A {\k44}TOYOTA\N{\k24}ELA {\k20}SEMPRE {\k20}FOI {\k18}MUITO
+Dialogue: 0,0:00:35.44,0:00:37.82,LBW,,0,0,0,,{\k20}MAIS {\k72}LUCRATIVA {\k16}DO {\k8}QUE\N{\k16}A {\k64}FORD. {\k12}A {\k20}FORD {\k10}TEM
+Dialogue: 0,0:00:37.84,0:00:40.72,LBW,,0,0,0,,{\k36}VÁRIOS {\k40}PROBLEMAS {\k16}AO {\k16}LONGO\N{\k12}DA {\k16}SUA {\k152}JORNADA.

@@ -1,0 +1,6 @@
+id,name,title,icon,path
+strategist,"Sofia Sistema","Estrategista de Conteúdo","🧭","./agents/strategist.agent.md"
+researcher,"Rafael Referência","Pesquisador de Mercado e Conteúdo","🔎","./agents/researcher.agent.md"
+ideator,"Iara Ideias","Criadora de Ângulos e Ganchos","💡","./agents/ideator.agent.md"
+linkedin-writer,"Lúcia LinkedIn","Redatora de LinkedIn","💼","./agents/linkedin-writer.agent.md"
+reviewer,"Clara Critérios","Revisora de Qualidade","✅","./agents/reviewer.agent.md"

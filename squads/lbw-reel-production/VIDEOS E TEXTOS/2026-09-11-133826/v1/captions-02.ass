@@ -1,0 +1,21 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: LBW,Arial,49,&H0000D7FF,&H00FFFFFF,&H00612B06,&H00000000,-1,0,0,0,100,100,0,0,1,3,2,2,55,55,250,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.46,LBW,,0,0,0,,{\k146}CERTIFICADO,
+Dialogue: 0,0:00:01.48,0:00:02.66,LBW,,0,0,0,,{\k118}CERTIFICAÇÃO
+Dialogue: 0,0:00:02.68,0:00:06.14,LBW,,0,0,0,,{\k28}OU {\k28}ENTÃO {\k12}O {\k28}PESSOAL {\k28}TAMBÉM\N{\k28}CHAMA {\k20}DE {\k174}QUALIFICAÇÃO.
+Dialogue: 0,0:00:06.16,0:00:09.42,LBW,,0,0,0,,{\k24}AQUI {\k16}É {\k40}LEGAL, {\k44}PESSOAL,\N{\k40}PORQUE {\k56}MUITAS {\k106}VEZES
+Dialogue: 0,0:00:09.44,0:00:12.58,LBW,,0,0,0,,{\k28}AS {\k48}PESSOAS {\k56}VENDEM\N{\k36}CURSO {\k28}PARA {\k118}VOCÊS
+Dialogue: 0,0:00:12.60,0:00:14.70,LBW,,0,0,0,,{\k64}DIZENDO {\k20}QUE {\k16}É {\k20}UMA\N{\k90}CERTIFICAÇÃO
+Dialogue: 0,0:00:14.72,0:00:17.38,LBW,,0,0,0,,{\k20}E {\k20}NA {\k32}VERDADE {\k12}É\N{\k16}UM {\k166}CERTIFICADO.
+Dialogue: 0,0:00:17.40,0:00:19.70,LBW,,0,0,0,,{\k12}E {\k24}ISSO {\k24}NÃO {\k36}SERVE {\k20}SÓ\N{\k24}PRO {\k36}WHITE {\k36}BELT, {\k18}TÁ?
+Dialogue: 0,0:00:19.72,0:00:35.44,LBW,,0,0,0,,{\k24}SERVE {\k20}PARA {\k40}QUALQUER {\k32}CURSO\N{\k24}QUE {\k20}VOCÊ {\k24}FOR {\k1388}FAZER.

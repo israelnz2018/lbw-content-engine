@@ -1,0 +1,13 @@
+name: "LBW Content Marketing Pipeline"
+description: "Da estratégia à revisão de Reels e posts de LinkedIn."
+steps:
+  - step-01-strategy
+  - step-02-research
+  - step-03-content-direction
+  - step-04-creative-development
+  - step-05-reels-writer
+  - step-06-linkedin-writer
+  - step-07-review
+  - step-08-final-approval
+checkpoints: []
+on_reject: step-05-reels-writer

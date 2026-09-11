@@ -1,0 +1,4 @@
+id,name,title,icon,path
+reels-writer,"Rita Roteiros Vídeo","Roteirista de Reel","🎬","./agents/reels-writer.agent.md"
+video-editor,"Vitor Vídeo","Editor de Vídeo Vertical","🎞️","./agents/video-editor.agent.md"
+visual-reviewer,"Vera Visual","Revisora Visual de Reels","👁️","./agents/visual-reviewer.agent.md"

@@ -1,0 +1,4 @@
+id,name,title,icon,path
+carousel-writer,"Caio Conteúdo","Roteirista de Carrossel","✍️","./agents/carousel-writer.agent.md"
+carousel-designer,"Diana Design","Designer de Carrossel","🎨","./agents/carousel-designer.agent.md"
+carousel-reviewer,"Raquel Revisão","Revisora de Carrossel","🔎","./agents/carousel-reviewer.agent.md"

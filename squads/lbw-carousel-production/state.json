@@ -1,0 +1,13 @@
+{
+  "squad": "lbw-carousel-production",
+  "status": "awaiting_approval",
+  "step": { "current": 6, "total": 6, "label": "carousel-step-06-final-approval" },
+  "agents": [
+    { "id": "carousel-writer", "name": "Caio Conteúdo", "icon": "✍️", "status": "done", "desk": { "col": 1, "row": 1 } },
+    { "id": "carousel-designer", "name": "Diana Design", "icon": "🎨", "status": "done", "desk": { "col": 2, "row": 1 } },
+    { "id": "carousel-reviewer", "name": "Raquel Revisão", "icon": "🔎", "status": "working", "desk": { "col": 3, "row": 1 } }
+  ],
+  "handoff": { "from": "carousel-writer", "to": "carousel-designer", "message": "Roteiro de 7 telas baseado no transcript do White Belt vídeo 01.", "completedAt": "2026-09-11T00:00:00.000Z" },
+  "startedAt": "2026-09-11T00:00:00.000Z",
+  "updatedAt": "2026-09-11T00:00:00.000Z"
+}

@@ -1,0 +1,28 @@
+{
+  "sourceVideo": "C:/Users/Israelnz2018/Downloads/Lean Six Sigma White Belt - Parte 1.mp4",
+  "logoPath": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/automation/assets/logo-oficial-lw.png",
+  "captionsAss": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/output/2026-09-11-125111/v1/captions.ass",
+  "transcriptSource": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/output/2026-09-11-125111/v1/transcript.md",
+  "finalOutputDirectory": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/White Belt video 3",
+  "outputPath": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/White Belt video 3/04 - White Belt - Qualquer profissional pode melhorar.mp4",
+  "transcriptOutputPath": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/White Belt video 3/04 - White Belt - Qualquer profissional pode melhorar transcript.md",
+  "workDir": "C:/Users/Israelnz2018/Israel-Projetos/Empresa de Gestão LBW/squads/lbw-reel-production/output/2026-09-11-125111/v1/work",
+  "clipStart": "00:07:57.800",
+  "firstWordStart": "00:07:57.800",
+  "clipEnd": "00:08:42.780",
+  "lastWordEnd": "00:08:42.680",
+  "nextWordStart": "00:08:42.880",
+  "minimumTailMs": 100,
+  "maximumStartDifferenceMs": 100,
+  "allowOverwrite": true,
+  "titleLine1": "QUEM PODE MELHORAR",
+  "titleLine2": "UM PROCESSO?",
+  "brandText": "EDUCAÇÃO PELO TRABALHO",
+  "layout": {
+    "slideWidth": 1000, "slideHeight": 562, "slideX": 40, "slideY": 330,
+    "faceCropWidth": 290, "faceCropHeight": 260, "faceCropX": 990, "faceCropY": 390,
+    "faceOutputWidth": 650, "faceOutputHeight": 582, "faceX": 215, "faceY": 940,
+    "coverX": 813, "coverY": 627, "coverWidth": 227, "coverHeight": 236,
+    "coverColor": "0xEEEEEE", "slideBarY": 853, "slideBarHeight": 39
+  }
+}

@@ -1,0 +1,31 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: LBW,Arial,49,&H0000D7FF,&H00FFFFFF,&H00612B06,&H00000000,-1,0,0,0,100,100,0,0,1,3,2,2,55,55,250,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:03.14,LBW,,0,0,0,,{\k16}O {\k28}QUE {\k28}FAZ {\k24}O {\k48}LEAN SIX {\k40}SIGMA\N{\k44}SER {\k36}TÃO {\k50}DIFERENTE
+Dialogue: 0,0:00:03.16,0:00:04.46,LBW,,0,0,0,,{\k24}DOS {\k106}DEMAIS?
+Dialogue: 0,0:00:04.48,0:00:07.06,LBW,,0,0,0,,{\k20}ISSO {\k20}AQUI {\k16}É {\k32}BEM {\k68}PERTINENTE,\N{\k28}GENTE, {\k24}PORQUE {\k20}AS {\k30}PESSOAS
+Dialogue: 0,0:00:07.08,0:00:11.10,LBW,,0,0,0,,{\k28}TENDEM {\k12}A {\k56}MISTURAR {\k28}ISSO {\k80}AQUI\N{\k28}E {\k40}COMPARAR {\k24}COM {\k106}PDCA
+Dialogue: 0,0:00:11.12,0:00:12.10,LBW,,0,0,0,,{\k98}8D
+Dialogue: 0,0:00:12.12,0:00:13.26,LBW,,0,0,0,,{\k114}A3.
+Dialogue: 0,0:00:13.28,0:00:16.98,LBW,,0,0,0,,{\k32}AÍ {\k24}TAMBÉM {\k16}O {\k40}PESSOAL {\k60}CONFUNDE\N{\k36}MUITO {\k24}E {\k138}MISTURA
+Dialogue: 0,0:00:16.100,0:00:18.94,LBW,,0,0,0,,{\k48}QUERENDO {\k44}MOSTRAR {\k12}QUE {\k16}O\N{\k24}LINHA {\k8}É {\k24}MELHOR {\k8}DO {\k10}QUE
+Dialogue: 0,0:00:18.96,0:00:21.38,LBW,,0,0,0,,{\k16}O {\k36}SIX {\k52}SIGMA.\N{\k138}ENTÃO
+Dialogue: 0,0:00:21.40,0:00:24.50,LBW,,0,0,0,,{\k28}TUDO {\k28}ISSO {\k24}EU {\k36}VOU {\k64}TENTAR\N{\k48}CLAREAR {\k20}DA {\k28}MELHOR {\k34}FORMA
+Dialogue: 0,0:00:24.52,0:00:26.34,LBW,,0,0,0,,{\k182}POSSÍVEL.
+Dialogue: 0,0:00:26.36,0:00:28.78,LBW,,0,0,0,,{\k16}A {\k52}EVOLUÇÃO {\k16}DO\N{\k48}LEAN SIX {\k110}SIGMA.
+Dialogue: 0,0:00:28.80,0:00:30.86,LBW,,0,0,0,,{\k16}POR {\k8}QUE {\k12}QUE {\k16}É {\k40}IMPORTANTE\N{\k28}FALAR {\k68}ISSO? {\k12}NÃO {\k6}É
+Dialogue: 0,0:00:30.88,0:00:33.26,LBW,,0,0,0,,{\k20}NEM {\k40}TANTO, {\k16}NÃO {\k8}É {\k20}NEM\N{\k32}TANTO {\k24}SOBRE {\k16}O {\k62}ASPECTO
+Dialogue: 0,0:00:33.28,0:00:34.42,LBW,,0,0,0,,{\k114}HISTÓRICO,
+Dialogue: 0,0:00:34.44,0:00:38.22,LBW,,0,0,0,,{\k32}É {\k40}MAIS {\k52}MOSTRAR {\k76}QUE {\k52}DURANTE\N{\k16}OS {\k44}ÚLTIMOS {\k40}ANOS {\k26}HOUVE
+Dialogue: 0,0:00:38.24,0:00:42.02,LBW,,0,0,0,,{\k80}UMA {\k12}UMA {\k48}EVOLUÇÃO {\k36}MUITO\N{\k36}GRANDE {\k20}DO {\k48}LEAN SIX {\k98}SIGMA
+Dialogue: 0,0:00:42.04,0:00:45.02,LBW,,0,0,0,,{\k40}E {\k60}MUITAS {\k44}PESSOAS {\k36}FALAM\N{\k28}DO {\k20}SIX {\k40}SIGMA {\k16}COMO {\k14}SE
+Dialogue: 0,0:00:45.04,0:00:48.04,LBW,,0,0,0,,{\k24}FOSSE {\k28}NA {\k44}PRIMEIRA\N{\k204}GERAÇÃO.

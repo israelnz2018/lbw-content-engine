@@ -1,0 +1,10 @@
+{
+  "name": "opensquad-project",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@imgly/background-removal-node": "^1.4.5",
+    "firebase-admin": "^14.3.0",
+    "playwright": "^1.58.2"
+  }
+}

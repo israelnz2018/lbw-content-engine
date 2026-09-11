@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-11",
+  "folderType": "Reels",
+  "sequence": 7,
+  "slug": "tema-do-carrossel",
+  "logoPath": "automation/assets/logo-oficial-lw.png",
+  "outputDirectory": "Carrosseis finais",
+  "slides": [
+    {
+      "title": "Seu processo sempre volta?",
+      "body": "Retrabalho costuma aparecer quando uma etapa entrega informação incompleta para a próxima.",
+      "visual": "process",
+      "imagePath": ""
+    },
+    {
+      "title": "Observe o fluxo",
+      "body": "Veja onde o trabalho para, volta ou precisa ser corrigido.",
+      "visual": "steps",
+      "imagePath": ""
+    },
+    {
+      "title": "Separe sintoma e causa",
+      "body": "O atraso é visível. A causa pode estar várias etapas antes.",
+      "visual": "compare",
+      "imagePath": ""
+    },
+    {
+      "title": "Converse com quem executa",
+      "body": "Quem realiza o trabalho conhece detalhes que não aparecem no procedimento.",
+      "visual": "people",
+      "imagePath": ""
+    },
+    {
+      "title": "Teste uma mudança",
+      "body": "Aplique em pequena escala, observe o resultado e ajuste antes de expandir.",
+      "visual": "data",
+      "imagePath": ""
+    },
+    {
+      "title": "Como funciona na sua empresa?",
+      "body": "Comente qual processo mais gera retrabalho no seu dia a dia.",
+      "visual": "question",
+      "imagePath": ""
+    }
+  ]
+}

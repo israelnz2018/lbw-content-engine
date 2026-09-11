@@ -1,0 +1,12 @@
+name: "LBW LinkedIn Production Pipeline"
+description: "Da estratégia à revisão de posts de LinkedIn da LBW."
+steps:
+  - step-01-strategy
+  - step-02-research
+  - step-03-content-direction
+  - step-04-creative-development
+  - step-06-linkedin-writer
+  - step-07-review
+  - step-08-final-approval
+checkpoints: []
+on_reject: step-06-linkedin-writer

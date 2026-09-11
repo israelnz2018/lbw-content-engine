@@ -1,0 +1,13 @@
+name: "LBW Reel Production Pipeline"
+description: "Analisa aulas horizontais, escolhe o corte, edita, renderiza e revisa Reels da LBW antes da aprovação final."
+steps:
+  - video-step-01-source-analysis
+  - video-step-02-edit-plan
+  - video-step-03-layout-assets
+  - video-step-04-render
+  - video-step-05-visual-review
+  - video-step-06-final-approval
+checkpoints:
+  - video-step-06-final-approval
+on_reject: video-step-03-layout-assets
+max_review_cycles: 3
