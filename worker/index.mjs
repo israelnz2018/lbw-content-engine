@@ -8,10 +8,12 @@
  *   node index.mjs            laço contínuo (é assim que roda no Railway)
  *   node index.mjs --uma-vez  processa uma tarefa e sai (bom para testar)
  */
-import { pegarProximaTarefa, concluirTarefa, falharTarefa } from './firestore.mjs';
+import { pegarProximaTarefa, concluirTarefa, falharTarefa, ouvirFila } from './firestore.mjs';
 import { EXECUTORES } from './executores.mjs';
 
-const INTERVALO_MS = Number(process.env.INTERVALO_FILA_MS || 5000);
+// Rede de segurança, não o mecanismo principal: quem acorda o worker é o ouvinte
+// da fila. Isto aqui só cobre o caso de a conexão do ouvinte cair sem avisar.
+const INTERVALO_MS = Number(process.env.INTERVALO_FILA_MS || 60000);
 const UMA_VEZ = process.argv.includes('--uma-vez');
 
 let encerrando = false;
@@ -54,25 +56,64 @@ async function processarUma() {
   return true;
 }
 
-async function laco() {
-  log('info', 'worker iniciado', { intervaloMs: INTERVALO_MS });
-
-  while (!encerrando) {
-    let teveTrabalho = false;
-    try {
-      teveTrabalho = await processarUma();
-    } catch (e) {
-      // Falha ao ler a fila (rede, permissão). Não derruba o worker.
-      log('erro', 'falha ao consultar a fila', { erro: String(e?.message || e).slice(0, 300) });
+/** Processa até a fila secar. Uma execução por vez, mesmo se a campainha tocar junto. */
+let drenando = false;
+async function drenarFila() {
+  if (drenando || encerrando) return;
+  drenando = true;
+  try {
+    while (!encerrando) {
+      let teve = false;
+      try {
+        teve = await processarUma();
+      } catch (e) {
+        // Falha ao ler a fila (rede, permissão). Não derruba o worker.
+        log('erro', 'falha ao consultar a fila', { erro: String(e?.message || e).slice(0, 300) });
+        return;
+      }
+      if (!teve) return;
     }
+  } finally {
+    drenando = false;
+  }
+}
 
-    if (UMA_VEZ) {
-      log('info', 'modo uma-vez, encerrando', { processou: teveTrabalho });
+async function laco() {
+  if (UMA_VEZ) {
+    const teve = await processarUma().catch((e) => {
+      log('erro', 'falha ao consultar a fila', { erro: String(e?.message || e).slice(0, 300) });
+      return false;
+    });
+    log('info', 'modo uma-vez, encerrando', { processou: teve });
+    return;
+  }
+
+  log('info', 'worker iniciado', { modo: 'ouvinte', batidaMs: INTERVALO_MS });
+
+  // A campainha: acorda na hora em que a tarefa entra na fila.
+  const parar = ouvirFila((erro) => {
+    if (erro) {
+      log('erro', 'ouvinte da fila falhou', { erro: String(erro?.message || erro).slice(0, 300) });
       return;
     }
-    // Só espera quando a fila está vazia. Com trabalho, emenda na próxima.
-    if (!teveTrabalho) await new Promise((r) => setTimeout(r, INTERVALO_MS));
-  }
+    void drenarFila();
+  });
+
+  // Uma passada na subida: pega o que entrou enquanto o worker estava fora do ar.
+  void drenarFila();
+
+  // Batida de segurança. Se o ouvinte cair sem avisar, o worker não fica mudo.
+  const batida = setInterval(() => { void drenarFila(); }, INTERVALO_MS);
+
+  await new Promise((resolve) => {
+    const conferir = setInterval(() => {
+      if (!encerrando) return;
+      clearInterval(conferir);
+      clearInterval(batida);
+      parar();
+      resolve();
+    }, 500);
+  });
 }
 
 // Encerramento limpo: termina a tarefa atual antes de sair.

@@ -92,6 +92,26 @@ export async function pegarProximaTarefa() {
   });
 }
 
+/**
+ * Avisa sempre que a fila muda, em vez de perguntar de dez em dez segundos.
+ *
+ * Consultar em laço custava ~17 mil leituras por dia sem nenhum trabalho acontecer,
+ * e ainda assim demorava até um intervalo inteiro pra pegar a tarefa. O ouvinte
+ * cobra só quando algo muda de verdade e acorda na hora.
+ *
+ * Ele é só a campainha: quem garante que dois workers não peguem a mesma tarefa
+ * continua sendo a transação de pegarProximaTarefa.
+ */
+export function ouvirFila(aoMudar) {
+  return db().collection(COLECOES.tarefas)
+    .where('status', '==', 'pendente')
+    .limit(20)
+    .onSnapshot(
+      (snap) => { if (!snap.empty) aoMudar(); },
+      (erro) => aoMudar(erro),
+    );
+}
+
 export async function concluirTarefa(tarefaId) {
   await db().collection(COLECOES.tarefas).doc(tarefaId).update({
     status: 'concluida',
