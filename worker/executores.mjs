@@ -13,7 +13,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { enviarPasta } from './storage.mjs';
-import { gravarPeca, atualizarCampanha, lerCampanha, lerConfig, lerPeca } from './firestore.mjs';
+import { gravarPeca, atualizarCampanha, lerCampanha, lerPeca } from './firestore.mjs';
 
 const execFileAsync = promisify(execFile);
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,101 +50,6 @@ async function rodarRenderizador(script, configPath) {
   }
 }
 
-/** Distância de edição entre duas strings (Levenshtein, programação dinâmica). */
-function levenshtein(a, b) {
-  if (a === b) return 0;
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  let anterior = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const atual = [i];
-    for (let j = 1; j <= b.length; j++) {
-      atual[j] = a[i - 1] === b[j - 1]
-        ? anterior[j - 1]
-        : 1 + Math.min(anterior[j - 1], anterior[j], atual[j - 1]);
-    }
-    anterior = atual;
-  }
-  return anterior[b.length];
-}
-
-function normalizarTermo(s) {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^\p{L}\p{N} ]+/gu, '').trim();
-}
-
-/**
- * Aplica o dicionário técnico do consultor ao texto.
- *
- * O consultor cadastra só a grafia CORRETA dos termos que importam pra ele
- * (ex.: "Lean Six Sigma", "DMAIC", "Kaizen") — não precisa adivinhar toda variação
- * de erro possível. Aqui o texto é varrido em janelas de 1 a N+1 palavras e
- * comparado por distância de edição contra cada termo; o trecho mais parecido dentro
- * do limiar vira a grafia cadastrada. Cobre erro de digitação e a maioria dos erros
- * de transcrição automática (troca de letra, palavra grudada ou faltando).
- *
- * Isso NÃO é correção fonética: um erro totalmente diferente na forma escrita
- * ("limanu factor" por "Lean Manufacturing") pode passar batido. Por isso a
- * revisão na etapa 5 continua sendo o filtro final, não este dicionário.
- */
-export function aplicarDicionario(texto, termos = []) {
-  const original = String(texto ?? '');
-  const candidatos = termos.map((t) => String(t ?? '').trim()).filter(Boolean)
-    // Termo mais longo primeiro: "Lean Six Sigma" precisa ser tentado antes de
-    // "Six Sigma", senão a metade da frase já estaria "usada" quando a frase
-    // inteira for testada.
-    .sort((a, b) => b.split(/\s+/).length - a.split(/\s+/).length);
-  if (!original.trim() || !candidatos.length) return original;
-
-  // Alterna palavra/separador: índice par é palavra, ímpar é o espaço entre elas.
-  const partes = original.split(/(\s+)/);
-  const indicesPalavra = partes.map((_, i) => i).filter((i) => i % 2 === 0 && partes[i]);
-  const usado = new Set();
-
-  for (const termo of candidatos) {
-    const termoNorm = normalizarTermo(termo);
-    if (!termoNorm) continue;
-    const nPalavras = termo.split(/\s+/).length;
-    // Termo de 1 palavra só casa com janela de 1: liberar ±1 aqui gera falso
-    // positivo (uma palavra comum colada em qualquer vizinha vira "parecida" com tudo).
-    const tamanhos = nPalavras === 1 ? [1] : [nPalavras - 1, nPalavras, nPalavras + 1].filter((t) => t >= 1);
-    // Termo curto exige semelhança maior: numa string de 4 letras, 1 letra
-    // diferente já é 25% de distância — um limiar frouxo aceitaria qualquer coisa.
-    const limiar = termoNorm.length < 6 ? 0.2 : 0.34;
-
-    for (const tam of tamanhos) {
-      for (let ini = 0; ini + tam <= indicesPalavra.length; ini++) {
-        const janela = indicesPalavra.slice(ini, ini + tam);
-        if (janela.some((i) => usado.has(i))) continue;
-
-        const trecho = janela.map((i) => partes[i]).join(' ');
-        const trechoNorm = normalizarTermo(trecho);
-        const base = Math.max(termoNorm.length, trechoNorm.length, 1);
-        const distancia = trechoNorm === termoNorm ? 0 : levenshtein(trechoNorm, termoNorm);
-
-        if (distancia / base <= limiar) {
-          if (trecho !== termo) {
-            // Pontuação colada na ponta da janela ("sigma," "dmaic).") pertence à
-            // frase, não ao termo — sem isso ela some junto com a palavra trocada.
-            const primeira = partes[janela[0]];
-            const ultima = partes[janela[janela.length - 1]];
-            const prefixo = (primeira.match(/^[^\p{L}\p{N}]+/u) || [''])[0];
-            const sufixo = (ultima.match(/[^\p{L}\p{N}]+$/u) || [''])[0];
-            // Escreve o termo certo (com a pontuação da ponta) na primeira posição
-            // e apaga o resto da janela (palavras e separadores internos).
-            partes[janela[0]] = prefixo + termo + sufixo;
-            for (let i = janela[0] + 1; i <= janela[janela.length - 1]; i++) partes[i] = '';
-          }
-          janela.forEach((i) => usado.add(i));
-          // Sem "break": o mesmo termo pode aparecer mais de uma vez no texto.
-        }
-      }
-    }
-  }
-
-  return partes.join('');
-}
-
 /* ------------------------------------------------------------------ */
 
 /**
@@ -158,23 +63,12 @@ export async function gerarCampanha(tarefa) {
   const campanha = await lerCampanha(campanhaId);
   if (!campanha) throw new Error(`Campanha ${campanhaId} não existe.`);
 
-  const config = await lerConfig(consultorId);
-  const termos = config?.termos || [];
   const temp = pastaTemporaria('campanha');
 
   try {
     await atualizarCampanha(campanhaId, { status: 'processando' });
 
     const renderConfig = { ...(tarefa.render || {}), outputRoot: temp };
-
-    // O dicionário técnico corrige os textos antes de virarem imagem.
-    if (Array.isArray(renderConfig.slides)) {
-      renderConfig.slides = renderConfig.slides.map((s) => ({
-        ...s,
-        title: aplicarDicionario(s.title, termos),
-        body: aplicarDicionario(s.body, termos),
-      }));
-    }
 
     const configPath = path.join(temp, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
@@ -229,21 +123,12 @@ export async function regerarPeca(tarefa) {
   const peca = await lerPeca(pecaId);
   if (!peca) throw new Error(`Peça ${pecaId} não existe.`);
 
-  const config = await lerConfig(consultorId);
-  const termos = config?.termos || [];
   const temp = pastaTemporaria('peca');
 
   try {
     await gravarPeca({ ...peca, status: 'gerando' });
 
     const renderConfig = { ...(tarefa.render || {}), outputRoot: temp };
-    if (Array.isArray(renderConfig.slides)) {
-      renderConfig.slides = renderConfig.slides.map((s) => ({
-        ...s,
-        title: aplicarDicionario(s.title, termos),
-        body: aplicarDicionario(s.body, termos),
-      }));
-    }
 
     const configPath = path.join(temp, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
