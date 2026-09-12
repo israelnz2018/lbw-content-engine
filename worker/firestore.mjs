@@ -8,9 +8,12 @@ import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 
+// Espelha src/types/marketing.ts na plataforma. Se uma coleção entrar lá e não
+// aqui, o worker quebra só na hora de usar — foi o que aconteceu com `criativos`.
 const COLECOES = {
   config: 'marketing_config',
   videos: 'marketing_videos',
+  criativos: 'marketing_criativos',
   campanhas: 'marketing_campanhas',
   pecas: 'marketing_pecas',
   tarefas: 'marketing_tarefas',
