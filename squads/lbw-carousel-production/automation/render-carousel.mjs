@@ -76,6 +76,29 @@ function pessoaUrl(ref) {
   return dataUrl(path.join(PESSOAS_DIR, hit));
 }
 
+// Personagens de expressao neutra ou positiva, para quem nao escolheu ninguem.
+// Sem isso o slide fica com a metade de baixo vazia: o texto ocupa o topo e o resto
+// do 1080x1350 fica em branco. Rodizio por indice, e nao sorteio, para o mesmo
+// config render sempre igual.
+const PESSOAS_PADRAO = [
+  '04-explicando-homem-40',
+  '12-lideranca-mulher-30',
+  '08-foco-mulher-40',
+  '11-explicando-homem-30',
+  '02-decisao-mulher-30',
+  '06-insight-homem-20',
+  '07-apontando-mulher-40',
+  '03-duvida-homem-40',
+];
+
+/** A pessoa do slide, ou uma do rodizio quando o slide nao pediu nenhuma. */
+function pessoaDoSlide(slide, indice) {
+  if (slide.pessoa === false || slide.pessoa === 'nenhuma') return '';
+  if (slide.pessoa) return pessoaUrl(slide.pessoa);
+  if (!pessoasDisponiveis.length) return '';
+  return pessoaUrl(PESSOAS_PADRAO[indice % PESSOAS_PADRAO.length]);
+}
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -106,8 +129,8 @@ function stripMarkup() {
 }
 
 // ── Corpos por tipo de slide ─────────────────────────────────
-function bodyCapa(slide) {
-  const img = pessoaUrl(slide.pessoa);
+function bodyCapa(slide, i) {
+  const img = pessoaDoSlide(slide, i);
   const sub = slide.sub ? `<div class="sub"><span class="sub-mark">?</span><span>${rich(slide.sub)}</span></div>` : '';
   return `<section class="main capa">
     <div class="capa-text">
@@ -135,8 +158,8 @@ function bodyCamadas(slide) {
   </section>`;
 }
 
-function bodyDado(slide) {
-  const img = pessoaUrl(slide.pessoa);
+function bodyDado(slide, i) {
+  const img = pessoaDoSlide(slide, i);
   const fonte = slide.fonte ? `<div class="fonte">Fonte: ${escapeHtml(slide.fonte)}</div>` : '';
   return `<section class="main light dado">
     <div class="dado-text">
@@ -161,8 +184,8 @@ function bodyComparacao(slide) {
   </section>`;
 }
 
-function bodyCta(slide) {
-  const img = pessoaUrl(slide.pessoa);
+function bodyCta(slide, i) {
+  const img = pessoaDoSlide(slide, i);
   const palavra = slide.palavra ? `<div class="cta-word">Comente <span class="hl">'${escapeHtml(slide.palavra)}'</span></div>` : '';
   return `<section class="main capa cta">
     <div class="capa-text">
@@ -175,8 +198,8 @@ function bodyCta(slide) {
   </section>`;
 }
 
-function bodyPadrao(slide) {
-  const img = pessoaUrl(slide.pessoa);
+function bodyPadrao(slide, i) {
+  const img = pessoaDoSlide(slide, i);
   return `<section class="main light dado">
     <div class="dado-text">
       <h1 class="title dark">${rich(slide.title)}</h1>
@@ -248,10 +271,15 @@ body{font-family:Arial,Helvetica,sans-serif}
 
 /* faixa de processo */
 .strip{flex:0 0 112px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:#0A2A5E;padding:0 40px;border-top:4px solid #1B4FD8}
-.strip-items{display:flex;align-items:center;gap:15px;flex-wrap:nowrap;flex:0 1 auto;min-width:0}
+/* overflow:hidden e o que impede a trilha de invadir a assinatura quando a soma
+   das duas passa de 1000px. Sem ele os textos se sobrepoem e ficam ilegiveis. */
+.strip-items{display:flex;align-items:center;gap:15px;flex-wrap:nowrap;flex:0 1 auto;min-width:0;overflow:hidden}
 .strip-item{display:flex;align-items:center;gap:7px;color:#C9D8EE;font-size:16px;font-weight:800;letter-spacing:.4px;white-space:nowrap}
 .dot{width:11px;height:11px;border-radius:3px;background:#1B4FD8;flex:0 0 11px}
-.strip-sign{text-align:right;color:#9FBCE6;font-size:16px;font-weight:700;line-height:1.35;white-space:nowrap;flex:0 0 auto}
+/* A assinatura tem prioridade sobre a trilha, mas nao pode comer a faixa inteira:
+   ate 46% da largura, e o que passar disso vira reticencias. */
+.strip-sign{text-align:right;color:#9FBCE6;font-size:16px;font-weight:700;line-height:1.35;white-space:nowrap;flex:0 0 auto;max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.strip-sign div{overflow:hidden;text-overflow:ellipsis}
 .strip-sign strong{color:#fff;font-weight:900}
 
 /* ── Variante 9:16: ocupa a altura extra em vez de deixar vazio ── */
@@ -283,7 +311,7 @@ body{font-family:Arial,Helvetica,sans-serif}
 .tall .strip-sign{font-size:18px}
 `;
 
-function slideHtml(slide, H = 1350) {
+function slideHtml(slide, H = 1350, indice = 0) {
   const type = String(slide.type || 'padrao').toLowerCase();
   const build = BUILDERS[type] || bodyPadrao;
   const isDark = type === 'capa' || type === 'cta';
@@ -291,9 +319,28 @@ function slideHtml(slide, H = 1350) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${cssFor(H)}</style></head><body>
 <main class="page${isDark ? ' dark' : ''}${tall}">
   <header class="brand"><img src="${logo}"><span>EDUCAÇÃO PELO TRABALHO</span></header>
-  ${build(slide)}
+  ${build(slide, indice)}
   ${stripMarkup()}
 </main></body></html>`;
+}
+
+/**
+ * Tira da trilha do processo os itens que nao cabem ao lado da assinatura.
+ *
+ * O CSS sozinho nao resolve: ou os dois textos se sobrepoem, ou o ultimo item sai
+ * cortado no meio da palavra ("ENTREGAR VAI"). Aqui medimos de verdade no navegador
+ * e removemos o item inteiro que ultrapassa a borda. Melhor mostrar quatro etapas
+ * completas do que cinco pela metade.
+ */
+async function ajustarRodape(pagina) {
+  await pagina.evaluate(() => {
+    const faixa = document.querySelector('.strip-items');
+    if (!faixa) return;
+    const limite = faixa.getBoundingClientRect().right;
+    for (const item of [...faixa.querySelectorAll('.strip-item')].reverse()) {
+      if (item.getBoundingClientRect().right > limite + 0.5) item.remove();
+    }
+  });
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -304,8 +351,9 @@ for (let index = 0; index < config.slides.length; index++) {
   const slide = config.slides[index];
   const wordCount = `${plain(slide.title)} ${plain(slide.body)}`.trim().split(/\s+/).filter(Boolean).length;
   if (wordCount > 32) throw new Error(`Página ${index + 1} excede 32 palavras.`);
-  await page.setContent(slideHtml(slide), { waitUntil: 'load' });
+  await page.setContent(slideHtml(slide, 1350, index), { waitUntil: 'load' });
   await page.evaluate(() => window.scrollTo(0, 0));
+  await ajustarRodape(page);
   const filename = `slide-${String(index + 1).padStart(2, '0')}.png`;
   const destination = path.join(feedDir, filename);
   await page.screenshot({ path: destination, type: 'png' });
@@ -330,8 +378,9 @@ if (video && video.enabled !== false) {
   const vPage = await browser.newPage({ viewport: { width: 1080, height: VH }, deviceScaleFactor: 1 });
   const frames = [];
   for (let i = 0; i < config.slides.length; i++) {
-    await vPage.setContent(slideHtml(config.slides[i], VH), { waitUntil: 'load' });
+    await vPage.setContent(slideHtml(config.slides[i], VH, i), { waitUntil: 'load' });
     await vPage.evaluate(() => window.scrollTo(0, 0));
+    await ajustarRodape(vPage);
     const fp = path.join(frameDir, `frame-${String(i + 1).padStart(2, '0')}.png`);
     await vPage.screenshot({ path: fp, type: 'png' });
     frames.push(fp);

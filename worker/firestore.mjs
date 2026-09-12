@@ -63,16 +63,23 @@ export { COLECOES };
  * A transação evita que dois workers peguem a mesma tarefa.
  */
 export async function pegarProximaTarefa() {
+  // Filtrar por status E ordenar por data exigiria um indice composto no Firestore,
+  // que precisa ser criado a mao no console. Como a fila e curta (poucas tarefas por
+  // consultor por dia), buscamos as pendentes e ordenamos em memoria: mesmo resultado,
+  // sem depender de configuracao externa.
   const fila = db().collection(COLECOES.tarefas)
     .where('status', '==', 'pendente')
-    .orderBy('criadoEm')
-    .limit(1);
+    .limit(20);
 
   return db().runTransaction(async (t) => {
     const snap = await t.get(fila);
     if (snap.empty) return null;
 
-    const doc = snap.docs[0];
+    // Mais antiga primeiro, para ninguem furar a fila.
+    const ordenadas = snap.docs.slice().sort((a, b) =>
+      String(a.data().criadoEm || '').localeCompare(String(b.data().criadoEm || '')));
+
+    const doc = ordenadas[0];
     const tarefa = { id: doc.id, ...doc.data() };
 
     t.update(doc.ref, {

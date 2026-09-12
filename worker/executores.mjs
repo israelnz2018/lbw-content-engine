@@ -23,6 +23,16 @@ const RENDERIZADORES = {
   linkedin: path.join(raiz, 'squads/lbw-linkedin-production/automation/render-linkedin.mjs'),
 };
 
+/**
+ * Qual arquivo representa a peça na prévia.
+ * Preferimos imagem ou vídeo; texto só serve se não houver outra coisa.
+ */
+function escolherPrincipal(caminhos = []) {
+  const visual = caminhos.find((c) => /\.(png|jpe?g|mp4)$/i.test(c));
+  const documento = caminhos.find((c) => /\.pdf$/i.test(c));
+  return visual || documento || caminhos[0] || null;
+}
+
 /** Pasta temporária desta execução. Sempre apagada no fim, dê certo ou não. */
 function pastaTemporaria(prefixo) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `lbw-${prefixo}-`));
@@ -112,7 +122,10 @@ export async function gerarCampanha(tarefa) {
           tipo: tipo === 'FEED' ? 'carrossel-feed' : tipo === 'REELS' ? 'carrossel-video' : 'linkedin-pdf',
           status: 'revisar',
           versao: 1,
-          arquivoUrl: caminhos[0],
+          // A capa da previa tem que ser a peca, nunca a legenda: em ordem alfabetica
+          // "legenda.md" vem antes de "slide-01.png" e virava a miniatura.
+          arquivoUrl: escolherPrincipal(caminhos),
+          arquivos: caminhos,
           criadoEm: new Date().toISOString(),
         };
         await gravarPeca(peca);
@@ -176,7 +189,8 @@ export async function regerarPeca(tarefa) {
       ...peca,
       status: 'revisar',
       versao: novaVersao,
-      arquivoUrl: caminhos[0] || peca.arquivoUrl,
+      arquivoUrl: escolherPrincipal(caminhos) || peca.arquivoUrl,
+      arquivos: caminhos.length ? caminhos : peca.arquivos,
       pedidoMelhoria: instrucao || peca.pedidoMelhoria,
     });
 
