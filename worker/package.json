@@ -1,0 +1,15 @@
+{
+  "name": "lbw-content-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Consome a fila do Firestore e produz as pecas de conteudo com ffmpeg e Playwright.",
+  "scripts": {
+    "start": "node index.mjs",
+    "uma-vez": "node index.mjs --uma-vez"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.3.0",
+    "playwright": "^1.58.2"
+  }
+}

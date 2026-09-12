@@ -28,7 +28,11 @@ const sequence = String(sequenceNumber).padStart(2, '0');
 // Área de entrega única na raiz, organizada por destino.
 // A legenda é copiada para toda pasta que recebe peça desta campanha.
 const base = `${config.date}__${folderType} - ${sequence}-${slug}`;
-const entregas = path.resolve(squadRoot, '..', '..', 'ENTREGAS');
+// Local: grava em ENTREGAS/ na raiz do projeto (comportamento de sempre).
+// Worker: recebe outputRoot e grava numa pasta temporária, de onde sobe pro Storage.
+const entregas = config.outputRoot
+  ? path.resolve(config.outputRoot)
+  : path.resolve(squadRoot, '..', '..', 'ENTREGAS');
 // Cada produto tem sua pasta, e dentro dela uma subpasta por campanha.
 const feedDir = path.resolve(entregas, 'FEED', base);         // 7 PNGs 4:5
 const reelsDir = path.resolve(entregas, 'REELS', base);       // MP4 9:16 — só se houver vídeo
