@@ -8,25 +8,40 @@ Ele roda **separado do site** de propósito. Renderizar consome memória e proce
 por minutos seguidos; no mesmo container que serve a plataforma, um render pesado
 derrubaria o site inteiro. Separado, o pior caso é a peça não sair.
 
-## O que fazer no Railway, uma vez só
+## Onde ele deve ficar
 
-1. **New Project → Deploy from GitHub repo** → escolha `israelnz2018/lbw-content-engine`.
+**No mesmo projeto do Railway onde já está a plataforma**, como um serviço a mais.
 
-   O `railway.json` na raiz já manda usar `worker/Dockerfile`. Não precisa configurar
-   build nem start command.
+Não é só organização. As variáveis de um projeto do Railway podem ser compartilhadas
+entre os serviços, e a plataforma já tem a credencial do Firebase lá. O worker foi
+feito para aceitar exatamente o mesmo nome de variável que ela usa
+(`FIREBASE_ADMIN_KEY_JSON`) — então, no mesmo projeto, **não é preciso colar a chave
+de novo**.
 
-2. Em **Variables**, crie duas:
+No Railway: abra o projeto da plataforma → **New** → **GitHub Repo** →
+`israelnz2018/lbw-content-engine`.
 
-   | Nome | Valor |
-   |---|---|
-   | `FIREBASE_SERVICE_ACCOUNT` | o conteúdo **inteiro** do JSON da conta de serviço, numa linha só |
-   | `FIREBASE_STORAGE_BUCKET` | `senha-92ce1.firebasestorage.app` |
+O `railway.json` na raiz do repositório já manda usar `worker/Dockerfile`. Não precisa
+configurar build nem start command.
 
-   O JSON é o mesmo arquivo que está em `secrets/` nesta máquina. Ele **não** está no
-   GitHub (o `.gitignore` bloqueia `secrets/`), e é por isso que precisa ser colado aqui.
+## As variáveis
 
-3. **Não** crie domínio público. O worker não atende requisição nenhuma — ele só ouve
-   a fila. Expor porta seria abrir uma porta que não existe.
+| Nome | Valor | Precisa colar? |
+|---|---|---|
+| `FIREBASE_ADMIN_KEY_JSON` | o JSON da conta de serviço | **Não, se já existir no projeto** |
+| `FIREBASE_STORAGE_BUCKET` | `senha-92ce1.firebasestorage.app` | Sim |
+
+Se a variável do Firebase não estiver visível para o novo serviço, marque-a como
+**Shared Variable** no projeto, ou cole o conteúdo de
+`secrets/firebase-service-account.json` (o arquivo inteiro, das chaves `{` a `}`).
+
+O worker também aceita `FIREBASE_SERVICE_ACCOUNT`, para o caso de rodar num projeto
+separado.
+
+## Não crie domínio público
+
+O worker não atende requisição nenhuma — ele só ouve a fila. Expor porta seria abrir
+uma porta que não existe.
 
 ## Como saber se está funcionando
 
@@ -40,8 +55,11 @@ Quando uma peça é pedida pela plataforma:
 
 ```json
 {"msg":"tarefa iniciada","tipo":"gerar-campanha"}
-{"msg":"tarefa concluida","segundos":33,"pecas":2}
+{"msg":"tarefa concluida","segundos":44,"pecas":3}
 ```
+
+Se a credencial estiver faltando, o worker diz o nome das duas variáveis que aceita e
+para — não fica em silêncio.
 
 ## Por que "ouvinte" e não consulta em laço
 

@@ -21,14 +21,22 @@ const COLECOES = {
 
 function credencial() {
   // No Railway a credencial vem inteira na variável, não como caminho de arquivo.
-  const bruto = process.env.FIREBASE_SERVICE_ACCOUNT;
+  //
+  // Aceita os DOIS nomes de propósito. A plataforma já usa FIREBASE_ADMIN_KEY_JSON,
+  // então quando o worker roda no mesmo projeto do Railway ele aproveita a variável
+  // que já está lá — ninguém precisa colar a chave duas vezes. FIREBASE_SERVICE_ACCOUNT
+  // continua valendo para quando o worker roda sozinho, em outro projeto.
+  const bruto = process.env.FIREBASE_ADMIN_KEY_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!bruto) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT não definida. Cole o JSON da conta de serviço na variável.');
+    throw new Error(
+      'Credencial do Firebase não encontrada. Defina FIREBASE_ADMIN_KEY_JSON '
+      + '(o mesmo nome que a plataforma usa) ou FIREBASE_SERVICE_ACCOUNT com o JSON da conta de serviço.',
+    );
   }
   try {
     return JSON.parse(bruto);
   } catch {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT não é um JSON válido.');
+    throw new Error('A credencial do Firebase não é um JSON válido. Confira se o valor colado começa com { e termina com }.');
   }
 }
 
