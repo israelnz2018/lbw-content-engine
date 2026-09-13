@@ -21,6 +21,8 @@ const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDERIZADORES = {
   carrossel: path.join(raiz, 'squads/lbw-carousel-production/automation/render-carousel.mjs'),
   linkedin: path.join(raiz, 'squads/lbw-linkedin-production/automation/render-linkedin.mjs'),
+  reel: path.join(raiz, 'squads/lbw-reel-production/automation/render-reel.mjs'),
+  legenda: path.join(raiz, 'squads/lbw-reel-production/automation/gerar-legenda-karaoke.mjs'),
 };
 
 /**
@@ -165,7 +167,81 @@ export async function regerarPeca(tarefa) {
   }
 }
 
+/**
+ * Gera o Reel falado: o consultor aparecendo, cortado da aula, com legenda karaokê.
+ *
+ * O worker não decide nada aqui — a tarefa chega com tudo resolvido: o endereço do
+ * vídeo, o recorte, os títulos e as palavras com tempo. Quem resolve é a plataforma,
+ * que é quem tem a chave do servidor de vídeo. O worker executa os dois scripts.
+ *
+ * A fonte é uma URL, não um arquivo: o ffmpeg busca por range HTTP e baixa só o
+ * trecho: cortar 36s de uma aula de uma hora custa 1,3 MB em vez de 140 MB.
+ */
+export async function gerarReel(tarefa) {
+  const { consultorId, campanhaId } = tarefa;
+  const render = tarefa.render || {};
+  if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
+  if (!Array.isArray(render.palavras) || !render.palavras.length) {
+    throw new Error('A tarefa não trouxe as palavras com tempo, e sem elas não há legenda.');
+  }
+
+  const temp = pastaTemporaria('reel');
+  try {
+    await atualizarCampanha(campanhaId, { status: 'processando' }).catch(() => {});
+
+    // 1. A legenda karaokê, a partir das palavras com tempo.
+    const entradaLegenda = path.join(temp, 'palavras.json');
+    const legendaAss = path.join(temp, 'legenda.ass');
+    fs.writeFileSync(entradaLegenda, JSON.stringify({
+      clipStartMs: render.clipStartMs,
+      clipEndMs: render.clipEndMs,
+      palavras: render.palavras,
+    }), 'utf8');
+    await execFileAsync('node', [RENDERIZADORES.legenda, entradaLegenda, legendaAss], {
+      maxBuffer: 8 * 1024 * 1024,
+      timeout: 60 * 1000,
+    });
+
+    // 2. O Reel.
+    const saidaDir = path.join(temp, 'saida');
+    const configPath = path.join(temp, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      ...render,
+      captionsAss: legendaAss,
+      outputPath: path.join(saidaDir, 'reel.mp4'),
+      workDir: path.join(temp, 'trabalho'),
+    }, null, 2), 'utf8');
+
+    const resultado = await rodarRenderizador(RENDERIZADORES.reel, configPath);
+
+    // 3. Sobe o que saiu. A capa vai junto: o publicador exige o arquivo, e é ela
+    // que vira a miniatura no Instagram.
+    const caminhos = await enviarPasta(saidaDir, { consultorId, campanhaId, tipo: 'reel' });
+    if (!caminhos.length) throw new Error('O Reel não produziu arquivo nenhum.');
+
+    const pecaId = `${campanhaId}__reel`;
+    await gravarPeca({
+      id: pecaId,
+      consultorId,
+      campanhaId,
+      tipo: 'reel',
+      status: 'revisar',
+      versao: 1,
+      arquivoUrl: caminhos.find((c) => c.endsWith('.mp4')) || escolherPrincipal(caminhos),
+      capaUrl: caminhos.find((c) => /capa\.jpe?g$/i.test(c)) || null,
+      arquivos: caminhos,
+      criadoEm: new Date().toISOString(),
+    });
+
+    await atualizarCampanha(campanhaId, { status: 'revisar' }).catch(() => {});
+    return { pecas: 1, segundos: resultado?.durationSeconds, arquivos: caminhos.length };
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+}
+
 export const EXECUTORES = {
   'gerar-campanha': gerarCampanha,
   'regerar-peca': regerarPeca,
+  'gerar-reel': gerarReel,
 };
