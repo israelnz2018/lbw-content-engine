@@ -8,6 +8,13 @@
 # A imagem do Playwright ja vem com o Chromium e as dependencias de sistema
 # resolvidas. Sai mais pesada, mas evita a lista de pacotes que costuma quebrar
 # a cada atualizacao.
+#
+# ATENCAO: esta versao tem que ser IGUAL a do playwright nos dois package.json,
+# e la a versao e fixa (sem o ^). A imagem traz o Chromium de UMA versao; se o npm
+# instalar outra, o Playwright procura um binario que nao existe e o render morre
+# com "Executable doesn't exist at /ms-playwright/chromium_headless_shell-...".
+# Foi o que aconteceu: imagem 1.58.2 e o ^ deixando o npm subir pra 1.63.0.
+# Pra atualizar, mude a imagem E os dois package.json na mesma tacada.
 FROM mcr.microsoft.com/playwright:v1.58.2-jammy
 
 ENV NODE_ENV=production \
