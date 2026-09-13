@@ -55,8 +55,84 @@ function dataUrl(file) {
   return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
 }
 
-const logo = dataUrl(resolveAsset(config.logoPath) || path.resolve(squadRoot, '..', '..', 'assets/marca/logo-lbw-branca.png'));
+/* ── A marca de quem assina a peça ─────────────────────────── */
+
+// O nome e a logo do consultor, e as cores dele. Sem isto a peça saía sempre com
+// "EDUCAÇÃO PELO TRABALHO" escrito fixo no código, mesmo para outro consultor.
+const MARCA = config.marca || {};
+
+/** Baixa a logo quando ela vem como endereço na web, e não como arquivo local. */
+async function logoDaMarca() {
+  const remota = String(MARCA.logoUrl || '').trim();
+  if (/^https?:\/\//i.test(remota)) {
+    try {
+      const resposta = await fetch(remota);
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const tipo = resposta.headers.get('content-type') || 'image/png';
+      const bytes = Buffer.from(await resposta.arrayBuffer());
+      return `data:${tipo.split(';')[0]};base64,${bytes.toString('base64')}`;
+    } catch (e) {
+      // Logo que não baixa não derruba a peça: cai na logo padrão e avisa.
+      console.warn(`aviso: não consegui baixar a logo ${remota} (${e.message}); usando a padrão`);
+    }
+  }
+  if (remota.startsWith('data:')) return remota;
+  return dataUrl(resolveAsset(config.logoPath || remota) || path.resolve(squadRoot, '..', '..', 'assets/marca/logo-lbw-branca.png'));
+}
+
+const logo = await logoDaMarca();
 if (!logo) throw new Error('Logo oficial não encontrada.');
+
+const NOME_DA_MARCA = String(MARCA.nome || 'EDUCAÇÃO PELO TRABALHO').toUpperCase();
+
+/* ── A paleta ──────────────────────────────────────────────── */
+
+/** Mistura duas cores hexadecimais. `t` é quanto da segunda entra. */
+function misturar(a, b, t) {
+  const ler = (h) => {
+    const x = h.replace('#', '');
+    return [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16));
+  };
+  const [r1, g1, b1] = ler(a);
+  const [r2, g2, b2] = ler(b);
+  const c = (x, y) => Math.round(x * (1 - t) + y * t).toString(16).padStart(2, '0');
+  return `#${c(r1, r2)}${c(g1, g2)}${c(b1, b2)}`;
+}
+
+/**
+ * As cores da peça.
+ *
+ * SEM cores na configuração, devolve os hexadecimais ORIGINAIS, um por um — o
+ * visual que já foi aprovado não muda nem um tom por causa de arredondamento de
+ * mistura. As derivadas só são calculadas quando o consultor traz a própria
+ * paleta, e aí um desvio pequeno é preferível a pedir nove cores a ele.
+ */
+function paleta(cores) {
+  const ORIGINAL = {
+    navy: '#0A2A5E', blue: '#1B4FD8', light: '#EEF3FA',
+    blueClaro: '#5B93FF', textoClaro: '#C9D8EE', sub: '#9FBCE6',
+    borda: '#DCE6F2', mutedForte: '#3A5B80', mutedSuave: '#6D89AB',
+    negTexto: '#4A688C',
+  };
+  if (!cores || !cores.navy || !cores.blue || !cores.light) return ORIGINAL;
+
+  const navy = cores.navy;
+  const blue = cores.blue;
+  const light = cores.light;
+  const muted = cores.muted || misturar(light, navy, 0.62);
+  return {
+    navy, blue, light,
+    blueClaro: misturar(blue, '#ffffff', 0.35),
+    textoClaro: misturar(light, navy, 0.18),
+    sub: misturar(light, blue, 0.35),
+    borda: misturar(light, navy, 0.08),
+    mutedForte: muted,
+    mutedSuave: misturar(muted, '#ffffff', 0.28),
+    negTexto: misturar(muted, '#ffffff', 0.12),
+  };
+}
+
+const C = paleta(MARCA.cores);
 
 // ── Biblioteca de pessoas (compartilhada entre os squads) ────
 const projectRoot = path.resolve(squadRoot, '..', '..');
@@ -215,24 +291,24 @@ const cssFor = (H) => `
 *{box-sizing:border-box}
 html,body{margin:0;width:1080px;height:${H}px;overflow:hidden}
 body{font-family:Arial,Helvetica,sans-serif}
-.page{width:1080px;height:${H}px;display:flex;flex-direction:column;background:#EEF3FA;overflow:hidden}
-.page.dark{background:#0A2A5E}
+.page{width:1080px;height:${H}px;display:flex;flex-direction:column;background:${C.light};overflow:hidden}
+.page.dark{background:${C.navy}}
 
-.brand{flex:0 0 96px;display:flex;align-items:center;gap:22px;background:#0A2A5E;padding:0 54px;border-bottom:4px solid #1B4FD8}
+.brand{flex:0 0 96px;display:flex;align-items:center;gap:22px;background:${C.navy};padding:0 54px;border-bottom:4px solid ${C.blue}}
 .brand img{width:62px;height:62px;object-fit:contain}
 .brand span{color:#fff;font-size:29px;font-weight:800;letter-spacing:.6px}
 
 .main{flex:1 1 auto;display:flex;min-height:0;padding:48px 54px 30px}
-.main.light{flex-direction:column;background:#EEF3FA}
-.hl{color:#1B4FD8}
-.page.dark .hl{color:#5B93FF}
+.main.light{flex-direction:column;background:${C.light}}
+.hl{color:${C.blue}}
+.page.dark .hl{color:${C.blueClaro}}
 
 .title{font-size:78px;line-height:1.02;letter-spacing:-2px;margin:0;text-transform:uppercase;font-style:italic;font-weight:900;color:#fff}
-.title.dark{color:#0A2A5E}
+.title.dark{color:${C.navy}}
 .title.small{font-size:56px}
-.body{font-size:35px;line-height:1.22;font-weight:700;color:#C9D8EE;margin:22px 0 0}
-.body.dim{color:#3A5B80}
-.rule{width:100%;height:4px;background:#1B4FD8;margin:26px 0 0;opacity:.8}
+.body{font-size:35px;line-height:1.22;font-weight:700;color:${C.textoClaro};margin:22px 0 0}
+.body.dim{color:${C.mutedForte}}
+.rule{width:100%;height:4px;background:${C.blue};margin:26px 0 0;opacity:.8}
 
 /* capa e cta */
 .capa{align-items:stretch;gap:0;padding:0 54px 0;position:relative}
@@ -240,45 +316,45 @@ body{font-family:Arial,Helvetica,sans-serif}
 .capa .title{font-size:86px}
 .capa-person{flex:0 0 50%;display:flex;align-items:flex-end;justify-content:flex-end;min-width:0;margin-left:-36px;overflow:visible}
 .capa-person img{width:165%;height:auto;max-width:none;max-height:100%;object-fit:contain;object-position:bottom right;transform:translateX(7%)}
-.sub{display:flex;align-items:center;gap:16px;margin-top:34px;color:#9FBCE6;font-size:28px;font-weight:700}
-.sub-mark{flex:0 0 46px;height:46px;border-radius:50%;background:#1B4FD8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:27px;font-weight:900}
+.sub{display:flex;align-items:center;gap:16px;margin-top:34px;color:${C.sub};font-size:28px;font-weight:700}
+.sub-mark{flex:0 0 46px;height:46px;border-radius:50%;background:${C.blue};color:#fff;display:flex;align-items:center;justify-content:center;font-size:27px;font-weight:900}
 .cta-word{margin-top:30px;font-size:44px;font-style:italic;font-weight:900;color:#fff}
 
 /* camadas */
 .cards{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;margin-top:26px;min-height:0}
-.card{display:flex;align-items:center;gap:26px;background:#fff;border:2px solid #DCE6F2;border-radius:22px;padding:22px 28px;box-shadow:0 10px 26px rgba(10,42,94,.10)}
+.card{display:flex;align-items:center;gap:26px;background:#fff;border:2px solid ${C.borda};border-radius:22px;padding:22px 28px;box-shadow:0 10px 26px rgba(10,42,94,.10)}
 .card-left{flex:0 0 33%}
-.chip{display:inline-block;background:#1B4FD8;color:#fff;font-size:20px;font-weight:900;letter-spacing:1px;padding:7px 15px;border-radius:8px}
-.card-label{font-size:42px;font-weight:900;color:#0A2A5E;line-height:1.04;margin-top:10px;text-transform:uppercase}
+.chip{display:inline-block;background:${C.blue};color:#fff;font-size:20px;font-weight:900;letter-spacing:1px;padding:7px 15px;border-radius:8px}
+.card-label{font-size:42px;font-weight:900;color:${C.navy};line-height:1.04;margin-top:10px;text-transform:uppercase}
 .card-items{flex:1 1 auto;display:flex;gap:14px}
-.card-item{flex:1;background:#EEF3FA;border-radius:14px;padding:16px 12px;text-align:center;font-size:24px;font-weight:700;color:#3A5B80;display:flex;align-items:center;justify-content:center}
-.link{width:5px;height:26px;background:#1B4FD8;margin:0 auto;opacity:.5}
+.card-item{flex:1;background:${C.light};border-radius:14px;padding:16px 12px;text-align:center;font-size:24px;font-weight:700;color:${C.mutedForte};display:flex;align-items:center;justify-content:center}
+.link{width:5px;height:26px;background:${C.blue};margin:0 auto;opacity:.5}
 
 /* dado e padrao */
 .main.light.dado{flex-direction:row;align-items:stretch;gap:20px;padding-bottom:0}
 .dado-text{flex:1 1 56%;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;padding-top:14px;position:relative;z-index:2}
 .dado-person{flex:0 0 44%;display:flex;align-items:flex-end;justify-content:flex-end;min-width:0;margin-left:-24px;overflow:visible}
 .dado-person img{width:160%;height:auto;max-width:none;max-height:100%;object-fit:contain;object-position:bottom right;transform:translateX(8%)}
-.numero{font-size:168px;font-weight:900;color:#1B4FD8;line-height:.9;letter-spacing:-6px;font-style:italic}
-.fonte{margin-top:22px;font-size:23px;font-weight:700;color:#6D89AB}
+.numero{font-size:168px;font-weight:900;color:${C.blue};line-height:.9;letter-spacing:-6px;font-style:italic}
+.fonte{margin-top:22px;font-size:23px;font-weight:700;color:${C.mutedSuave}}
 
 /* comparacao */
 .compare{flex:1 1 auto;display:flex;align-items:center;gap:22px;margin-top:28px;min-height:0}
 .cmp{flex:1;height:72%;border-radius:26px;display:flex;align-items:center;justify-content:center;text-align:center;padding:26px;font-size:44px;font-weight:900;text-transform:uppercase;font-style:italic}
-.cmp-neg{background:#DCE6F2;color:#4A688C}
-.cmp-pos{background:#1B4FD8;color:#fff}
-.cmp-arrow{font-size:64px;font-weight:900;color:#1B4FD8}
+.cmp-neg{background:${C.borda};color:${C.negTexto}}
+.cmp-pos{background:${C.blue};color:#fff}
+.cmp-arrow{font-size:64px;font-weight:900;color:${C.blue}}
 
 /* faixa de processo */
-.strip{flex:0 0 112px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:#0A2A5E;padding:0 40px;border-top:4px solid #1B4FD8}
+.strip{flex:0 0 112px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:${C.navy};padding:0 40px;border-top:4px solid ${C.blue}}
 /* overflow:hidden e o que impede a trilha de invadir a assinatura quando a soma
    das duas passa de 1000px. Sem ele os textos se sobrepoem e ficam ilegiveis. */
 .strip-items{display:flex;align-items:center;gap:15px;flex-wrap:nowrap;flex:0 1 auto;min-width:0;overflow:hidden}
-.strip-item{display:flex;align-items:center;gap:7px;color:#C9D8EE;font-size:16px;font-weight:800;letter-spacing:.4px;white-space:nowrap}
-.dot{width:11px;height:11px;border-radius:3px;background:#1B4FD8;flex:0 0 11px}
+.strip-item{display:flex;align-items:center;gap:7px;color:${C.textoClaro};font-size:16px;font-weight:800;letter-spacing:.4px;white-space:nowrap}
+.dot{width:11px;height:11px;border-radius:3px;background:${C.blue};flex:0 0 11px}
 /* A assinatura tem prioridade sobre a trilha, mas nao pode comer a faixa inteira:
    ate 46% da largura, e o que passar disso vira reticencias. */
-.strip-sign{text-align:right;color:#9FBCE6;font-size:16px;font-weight:700;line-height:1.35;white-space:nowrap;flex:0 0 auto;max-width:46%;overflow:hidden;text-overflow:ellipsis}
+.strip-sign{text-align:right;color:${C.sub};font-size:16px;font-weight:700;line-height:1.35;white-space:nowrap;flex:0 0 auto;max-width:46%;overflow:hidden;text-overflow:ellipsis}
 .strip-sign div{overflow:hidden;text-overflow:ellipsis}
 .strip-sign strong{color:#fff;font-weight:900}
 
@@ -318,7 +394,7 @@ function slideHtml(slide, H = 1350, indice = 0) {
   const tall = H >= 1600 ? ' tall' : '';
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${cssFor(H)}</style></head><body>
 <main class="page${isDark ? ' dark' : ''}${tall}">
-  <header class="brand"><img src="${logo}"><span>EDUCAÇÃO PELO TRABALHO</span></header>
+  <header class="brand"><img src="${logo}"><span>${escapeHtml(NOME_DA_MARCA)}</span></header>
   ${build(slide, indice)}
   ${stripMarkup()}
 </main></body></html>`;
