@@ -192,9 +192,12 @@ export async function gerarReel(tarefa) {
     // 1. A legenda karaokê, a partir das palavras com tempo.
     const entradaLegenda = path.join(temp, 'palavras.json');
     const legendaAss = path.join(temp, 'legenda.ass');
+    // A velocidade vai junto: se o Reel é acelerado e a legenda não sabe disso,
+    // ela dessincroniza da fala do primeiro segundo em diante.
     fs.writeFileSync(entradaLegenda, JSON.stringify({
       clipStartMs: render.clipStartMs,
       clipEndMs: render.clipEndMs,
+      velocidade: render.speed ?? 1,
       palavras: render.palavras,
     }), 'utf8');
     await execFileAsync('node', [RENDERIZADORES.legenda, entradaLegenda, legendaAss], {

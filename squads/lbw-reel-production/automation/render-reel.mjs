@@ -97,6 +97,26 @@ if (config.nextWordStart !== undefined && config.nextWordStart !== null) {
 
 const duracaoSegundos = Number(((fimMs - inicioMs) / 1000).toFixed(3));
 
+/* ── Velocidade ────────────────────────────────────────────── */
+
+// Acelerar a fala um pouco é técnica de Reels, não capricho: 1,1x tira o arrasto
+// das pausas sem soar robótico, e o Instagram premia quem segura a atenção.
+//
+// Quem acelera o vídeo é o setpts; quem acelera o áudio é o atempo, que muda o
+// RITMO sem mexer no TOM — a voz continua sendo a mesma voz. A legenda karaokê
+// encolhe junto, e isso se resolve antes, na geração do .ass, porque o filtro
+// subtitles roda depois do setpts e já enxerga o tempo comprimido.
+//
+// O intervalo: acima de 1,5x a fala deixa de se entender; abaixo de 0,8x arrasta.
+// Fora disso é erro de configuração, e erro de configuração grita em vez de
+// produzir um Reel impublicável em silêncio.
+const velocidade = Number(config.speed ?? 1);
+if (!Number.isFinite(velocidade) || velocidade < 0.8 || velocidade > 1.5) {
+  throw new Error(`Velocidade fora do intervalo aceito (0,8x a 1,5x): ${config.speed}`);
+}
+// A duração do que SAI, que é diferente da duração do trecho quando há aceleração.
+const duracaoSaidaSegundos = Number((duracaoSegundos / velocidade).toFixed(3));
+
 /* ── Entradas e saídas ─────────────────────────────────────── */
 
 function resolverEntrada(valor, rotulo) {
@@ -137,6 +157,9 @@ const L = config.layout;
 if (!L) throw new Error('Informe o bloco "layout" na configuração.');
 
 const f = caminhoParaFiltro(fonte);
+// A 1x a expressão fica LITERALMENTE a de antes, sem divisão nenhuma: o caminho
+// normal continua sendo o caminho que já foi medido.
+const setpts = velocidade === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${velocidade}`;
 const filtro = [
   // NAO REMOVER o setpts=PTS-STARTPTS das duas ramificacoes abaixo.
   // O filtro color gera o fundo a partir do tempo zero, mas a fonte entra com -ss antes
@@ -145,8 +168,8 @@ const filtro = [
   // aparecem so o drawbox cinza e a barra azul sobre o fundo, sem slide e sem professor.
   // Como o Reel roda em laco no Instagram, esse quadro pisca a cada volta.
   // Sintoma no arquivo: o quadro em t=0 fica ~4x menor que os seguintes (197 KB contra 830 KB).
-  `[0:v]setpts=PTS-STARTPTS,scale=${L.slideWidth}:${L.slideHeight}:flags=lanczos[top]`,
-  `[0:v]setpts=PTS-STARTPTS,crop=${L.faceCropWidth}:${L.faceCropHeight}:${L.faceCropX}:${L.faceCropY},scale=${L.faceOutputWidth}:${L.faceOutputHeight}:flags=lanczos[face]`,
+  `[0:v]${setpts},scale=${L.slideWidth}:${L.slideHeight}:flags=lanczos[top]`,
+  `[0:v]${setpts},crop=${L.faceCropWidth}:${L.faceCropHeight}:${L.faceCropX}:${L.faceCropY},scale=${L.faceOutputWidth}:${L.faceOutputHeight}:flags=lanczos[face]`,
   `color=c=0xF3F7FC:s=1080x1920:r=30[canvas]`,
   `[canvas][top]overlay=${L.slideX}:${L.slideY}[tmp1]`,
   `[tmp1]drawbox=x=${L.coverX}:y=${L.coverY}:w=${L.coverWidth}:h=${L.coverHeight}:color=${L.coverColor}:t=fill,drawbox=x=${L.slideX}:y=${L.slideBarY}:w=${L.slideWidth}:h=${L.slideBarHeight}:color=0x202D70:t=fill[tmpclean]`,
@@ -176,8 +199,12 @@ const argumentos = [
   '-loop', '1', '-i', logo,
   '-filter_complex', filtro,
   '-map', '[outv]', '-map', '0:a:0?',
-  '-t', String(duracaoSegundos),
-  '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+  '-t', String(duracaoSaidaSegundos),
+  // atempo ANTES do loudnorm: normalizar o volume depois de mudar o ritmo mede o
+  // áudio que de fato vai sair.
+  '-af', velocidade === 1
+    ? 'loudnorm=I=-16:TP=-1.5:LRA=11'
+    : `atempo=${velocidade},loudnorm=I=-16:TP=-1.5:LRA=11`,
   '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
   '-pix_fmt', 'yuv420p', '-r', '30',
   '-c:a', 'aac', '-ar', '48000', '-b:a', '128k',
@@ -215,9 +242,9 @@ if (!fluxoAudio) throw new Error('A saída foi gerada sem áudio.');
 // e um quadro do fim costuma pegar a tela de encerramento ou o professor de olho
 // fechado — foi o que aconteceu com o Reel 07.
 let capa = null;
-const segundoDaCapa = Number(config.portraitTimeSeconds ?? Math.min(3, duracaoSegundos / 3));
-if (segundoDaCapa > duracaoSegundos / 3) {
-  throw new Error(`A capa deve sair do primeiro terço do Reel (até ${(duracaoSegundos / 3).toFixed(1)}s), e foi pedida em ${segundoDaCapa}s.`);
+const segundoDaCapa = Number(config.portraitTimeSeconds ?? Math.min(3, duracaoSaidaSegundos / 3));
+if (segundoDaCapa > duracaoSaidaSegundos / 3) {
+  throw new Error(`A capa deve sair do primeiro terço do Reel (até ${(duracaoSaidaSegundos / 3).toFixed(1)}s), e foi pedida em ${segundoDaCapa}s.`);
 }
 capa = path.join(path.dirname(saida), 'capa.jpg');
 execFileSync('ffmpeg', [
@@ -235,6 +262,7 @@ console.log(JSON.stringify({
   outputPath: saida,
   coverPath: capa,
   durationSeconds: Number(sonda.format.duration),
+  speed: velocidade,
   width: fluxoVideo.width,
   height: fluxoVideo.height,
   fonte,

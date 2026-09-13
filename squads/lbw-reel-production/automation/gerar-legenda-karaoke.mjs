@@ -32,6 +32,19 @@ const saidaPath = process.argv[3];
 if (!entradaPath || !saidaPath) throw new Error('Uso: node gerar-legenda-karaoke.mjs entrada.json saida.ass');
 
 const entrada = JSON.parse(fs.readFileSync(path.resolve(entradaPath), 'utf8'));
+
+// Quando o Reel é acelerado, a legenda tem que encolher junto ou ela dessincroniza
+// do primeiro segundo em diante.
+//
+// O AGRUPAMENTO continua sendo feito no tempo ORIGINAL de propósito: quem decide
+// onde a linha quebra é a fala (a pausa de 850 ms, o tamanho do bloco), e a fala
+// não muda porque o vídeo toca mais rápido. Só os tempos ESCRITOS no .ass são
+// divididos pelo fator.
+const velocidade = Number(entrada.velocidade ?? 1);
+if (!Number.isFinite(velocidade) || velocidade <= 0) {
+  throw new Error(`Velocidade inválida: ${entrada.velocidade}`);
+}
+
 const inicioMs = Number(entrada.clipStartMs);
 const fimMs = Number(entrada.clipEndMs);
 if (!Number.isFinite(inicioMs) || !Number.isFinite(fimMs) || fimMs <= inicioMs) {
@@ -113,7 +126,7 @@ for (let b = 0; b < blocos.length; b++) {
     const proximoInicio = i + 1 < bloco.length ? bloco[i + 1].inicio : fimBlocoAbs;
     // A duração de cada palavra é até o começo da PRÓXIMA, não até o próprio fim:
     // é assim que o karaokê fica contínuo, sem buraco entre uma palavra e outra.
-    const centesimos = Math.max(1, Math.round((proximoInicio - palavra.inicio) / 10));
+    const centesimos = Math.max(1, Math.round((proximoInicio - palavra.inicio) / velocidade / 10));
     if (i > 0) {
       if (!quebrou && usado >= metade) { texto += '\\N'; quebrou = true; }
       else texto += ' ';
@@ -122,7 +135,7 @@ for (let b = 0; b < blocos.length; b++) {
     usado += palavra.texto.length + 1;
   }
 
-  linhas.push(`Dialogue: 0,${tempoAss(inicioBlocoAbs - inicioMs)},${tempoAss(fimBlocoAbs - inicioMs)},LBW,,0,0,0,,${texto}`);
+  linhas.push(`Dialogue: 0,${tempoAss((inicioBlocoAbs - inicioMs) / velocidade)},${tempoAss((fimBlocoAbs - inicioMs) / velocidade)},LBW,,0,0,0,,${texto}`);
 }
 
 fs.mkdirSync(path.dirname(path.resolve(saidaPath)), { recursive: true });
@@ -132,6 +145,7 @@ console.log(JSON.stringify({
   arquivo: path.resolve(saidaPath),
   palavras: palavras.length,
   blocos: blocos.length,
+  velocidade,
   primeiraPalavra: palavras[0].texto,
   primeiraPalavraMs: palavras[0].inicio,
   ultimaPalavra: palavras[palavras.length - 1].texto,
