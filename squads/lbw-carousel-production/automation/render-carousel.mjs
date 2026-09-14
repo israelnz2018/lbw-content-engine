@@ -240,7 +240,7 @@ function stripMarkup() {
 function bodyCapa(slide, i) {
   const img = pessoaDoSlide(slide, i);
   const sub = slide.sub ? `<div class="sub"><span class="sub-mark">?</span><span>${rich(slide.sub)}</span></div>` : '';
-  return `<section class="main capa">
+  return `<section class="main capa${img ? '' : ' sozinho'}">
     <div class="capa-text">
       <h1 class="title">${rich(slide.title)}</h1>
       <div class="rule"></div>
@@ -269,7 +269,7 @@ function bodyCamadas(slide) {
 function bodyDado(slide, i) {
   const img = pessoaDoSlide(slide, i);
   const fonte = slide.fonte ? `<div class="fonte">Fonte: ${escapeHtml(slide.fonte)}</div>` : '';
-  return `<section class="main light dado">
+  return `<section class="main light dado${img ? '' : ' sozinho'}">
     <div class="dado-text">
       <div class="numero">${escapeHtml(slide.numero || '')}</div>
       <h1 class="title dark small">${rich(slide.title)}</h1>
@@ -294,13 +294,14 @@ function bodyComparacao(slide) {
 
 function bodyCta(slide, i) {
   const img = pessoaDoSlide(slide, i);
-  const palavra = slide.palavra ? `<div class="cta-word">Comente <span class="hl">'${escapeHtml(slide.palavra)}'</span></div>` : '';
-  return `<section class="main capa cta">
+  // O "Comente 'PALAVRA'" saiu. Pedir comentario com uma palavra-chave e isca de
+  // engajamento: quem le sabe que e isca, e a pagina de fecho fica valendo menos
+  // do que a ideia que ela deveria fechar. O fecho agora e o proprio texto.
+  return `<section class="main capa cta${img ? '' : ' sozinho'}">
     <div class="capa-text">
       <h1 class="title">${rich(slide.title)}</h1>
       <div class="rule"></div>
       <p class="body">${rich(slide.body)}</p>
-      ${palavra}
     </div>
     <div class="capa-person">${img ? `<img src="${img}" alt="">` : ''}</div>
   </section>`;
@@ -308,7 +309,7 @@ function bodyCta(slide, i) {
 
 function bodyPadrao(slide, i) {
   const img = pessoaDoSlide(slide, i);
-  return `<section class="main light dado">
+  return `<section class="main light dado${img ? '' : ' sozinho'}">
     <div class="dado-text">
       <h1 class="title dark">${rich(slide.title)}</h1>
       <p class="body dim">${rich(slide.body)}</p>
@@ -350,7 +351,6 @@ body{font-family:Arial,Helvetica,sans-serif}
 .capa-person img{width:165%;height:auto;max-width:none;max-height:100%;object-fit:contain;object-position:bottom right;transform:translateX(7%)}
 .sub{display:flex;align-items:center;gap:16px;margin-top:34px;color:${C.sub};font-size:28px;font-weight:700}
 .sub-mark{flex:0 0 46px;height:46px;border-radius:50%;background:${C.blue};color:#fff;display:flex;align-items:center;justify-content:center;font-size:27px;font-weight:900}
-.cta-word{margin-top:30px;font-size:44px;font-style:italic;font-weight:900;color:#fff}
 
 /* camadas */
 .cards{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;margin-top:26px;min-height:0}
@@ -377,6 +377,33 @@ body{font-family:Arial,Helvetica,sans-serif}
 .cmp-pos{background:${C.blue};color:#fff}
 .cmp-arrow{font-size:64px;font-weight:900;color:${C.blue}}
 
+/* ── Sem pessoa: o texto toma a pagina ──────────────────────────
+   Uma pagina sem pessoa deixava 60% de branco embaixo, porque a coluna do texto
+   ocupa so metade e o resto era da figura. Aqui o texto fica com a largura toda,
+   centrado na vertical, e cresce — a pagina passa a ser DE TEXTO, em vez de uma
+   pagina de figura a que faltou a figura. */
+.main.sozinho .capa-text,
+.main.sozinho .dado-text{flex:1 1 100%;justify-content:center;padding-right:0}
+.main.sozinho .capa-person,
+.main.sozinho .dado-person{display:none}
+.main.capa.sozinho{padding:0 70px}
+.main.sozinho .title{font-size:104px}
+.main.sozinho .title.small{font-size:74px}
+.main.sozinho .capa .title,
+.main.capa.sozinho .title{font-size:112px}
+.main.sozinho .body{font-size:46px;line-height:1.24;margin-top:30px}
+.main.sozinho .numero{font-size:210px}
+.main.sozinho .sub{font-size:34px;margin-top:44px}
+.main.sozinho .sub-mark{flex:0 0 56px;height:56px;font-size:33px}
+.main.sozinho .fonte{font-size:28px}
+
+/* No 9:16 a pagina ja e mais alta: sem pessoa, cresce mais ainda. */
+.tall .main.sozinho .title{font-size:124px}
+.tall .main.sozinho .title.small{font-size:88px}
+.tall .main.capa.sozinho .title{font-size:132px}
+.tall .main.sozinho .body{font-size:56px}
+.tall .main.sozinho .numero{font-size:280px}
+
 /* faixa de processo */
 .strip{flex:0 0 112px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:${C.navy};padding:0 40px;border-top:4px solid ${C.blue}}
 /* overflow:hidden e o que impede a trilha de invadir a assinatura quando a soma
@@ -400,7 +427,6 @@ body{font-family:Arial,Helvetica,sans-serif}
 .tall .numero{font-size:230px}
 .tall .sub{font-size:34px;margin-top:44px}
 .tall .sub-mark{flex:0 0 56px;height:56px;font-size:33px}
-.tall .cta-word{font-size:56px;margin-top:40px}
 .tall .cards{justify-content:center;margin-top:40px;gap:0}
 .tall .card{padding:34px 32px;border-radius:26px}
 .tall .card-label{font-size:52px;margin-top:14px}
