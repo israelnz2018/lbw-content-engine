@@ -79,11 +79,55 @@ const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><sty
 <div class="portrait-shell"><img src="${portrait}"></div><div class="topic">${topico}<strong>${topicoForte}</strong></div></section>
 <div class="bottom-accent"></div></main></body></html>`;
 
+/**
+ * Faz o gancho caber, medindo de verdade no navegador.
+ *
+ * A fonte era fixa em 104px e cada linha do gancho ia para um <span> de bloco. Uma
+ * linha comprida — "SUA MENTALIDADE É DE" — nao cabia nos 960px e QUEBRAVA SOZINHA
+ * em duas: o gancho de duas linhas virava quatro, descia sobre a regua amarela e
+ * sobre o retrato, e a capa saia com uma risca cortando a palavra ao meio.
+ *
+ * CSS sozinho nao resolve, porque depende da largura real do texto na fonte
+ * instalada. E a mesma tecnica do rodape do carrossel: medir no Chromium e ajustar.
+ *
+ * A regua desce junto quando o gancho ocupa mais: ela marca o fim do gancho, entao
+ * nao pode ficar num ponto fixo. Nunca SOBE do lugar desenhado, para o gancho curto
+ * continuar saindo exatamente como o padrao homologado.
+ */
+async function ajustarGancho(pagina) {
+  await pagina.evaluate(() => {
+    const gancho = document.querySelector('.hook');
+    const regua = document.querySelector('.rule');
+    if (!gancho) return;
+    const linhas = [...gancho.querySelectorAll('.line')];
+    if (!linhas.length) return;
+
+    /** Uma linha "cabe" quando ocupa a altura de uma linha so. */
+    const cabe = () => linhas.every((l) => {
+      const fonte = parseFloat(getComputedStyle(l).fontSize);
+      return l.getBoundingClientRect().height < fonte * 1.35;
+    });
+
+    let tamanho = 104;
+    while (!cabe() && tamanho > 46) {
+      tamanho -= 4;
+      linhas.forEach((l) => { l.style.fontSize = `${tamanho}px`; });
+    }
+
+    if (regua) {
+      const fimDoGancho = gancho.offsetTop + gancho.offsetHeight;
+      const desenhado = 515;
+      regua.style.top = `${Math.max(desenhado, fimDoGancho + 42)}px`;
+    }
+  });
+}
+
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: 'load' });
+  await ajustarGancho(page);
   await page.screenshot({ path: outputPath, type: 'jpeg', quality: 94 });
 } finally {
   await browser.close();
