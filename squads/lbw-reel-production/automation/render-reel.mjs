@@ -247,11 +247,54 @@ if (segundoDaCapa > duracaoSaidaSegundos / 3) {
   throw new Error(`A capa deve sair do primeiro terço do Reel (até ${(duracaoSaidaSegundos / 3).toFixed(1)}s), e foi pedida em ${segundoDaCapa}s.`);
 }
 capa = path.join(path.dirname(saida), 'capa.jpg');
-execFileSync('ffmpeg', [
-  '-y', '-hide_banner', '-loglevel', 'error',
-  '-ss', String(segundoDaCapa), '-i', temporario,
-  '-frames:v', '1', '-q:v', '2', '-update', '1', capa,
-], { stdio: 'pipe' });
+
+if (config.cover) {
+  // A CAPA E UMA ARTE PROPRIA, NAO UM QUADRO DO VIDEO.
+  //
+  // E o que manda o padrao das capas (pipeline/data/cover-standard.md, primeira
+  // regra: "Nunca usar um quadro completo do video como capa"). Eu vinha violando
+  // isso: arrancava o quadro inteiro do Reel ja montado, com o slide, o circulo do
+  // rosto e a legenda karaoke dentro. No feed do Instagram isso vira uma miniatura
+  // confusa, com texto pequeno demais para ler.
+  //
+  // Do video sai SO O RETRATO. O resto — marca, curso, episodio, gancho, cores do
+  // curso — e desenhado pelo render-reel-cover.mjs, que ja existia e so nao estava
+  // ligado a plataforma.
+  const retrato = path.join(trabalho, 'retrato.png');
+
+  // O tempo da capa e contado no video QUE SAI; a fonte corre na velocidade
+  // original. Sem multiplicar pela velocidade, um Reel a 1,25x pegaria o retrato
+  // num instante anterior ao pretendido.
+  const segundoNaFonte = inicioMs / 1000 + segundoDaCapa * velocidade;
+  execFileSync('ffmpeg', [
+    '-y', '-hide_banner', '-loglevel', 'error',
+    ...(cabecalhos ? ['-headers', cabecalhos] : []),
+    '-ss', paraTempoFfmpeg(segundoNaFonte * 1000), '-i', fonteVideo,
+    '-frames:v', '1',
+    '-vf', `crop=${L.faceCropWidth}:${L.faceCropHeight}:${L.faceCropX}:${L.faceCropY},scale=900:950:flags=lanczos`,
+    '-update', '1', retrato,
+  ], { stdio: 'pipe' });
+  if (!fs.existsSync(retrato)) throw new Error('Nao consegui extrair o retrato para a capa.');
+
+  const configCapa = path.join(trabalho, 'config-capa.json');
+  fs.writeFileSync(configCapa, JSON.stringify({ cover: config.cover, logoPath: logo }, null, 2), 'utf8');
+  try {
+    execFileSync('node', [
+      path.join(scriptDir, 'render-reel-cover.mjs'),
+      '--config', configCapa, '--portrait', retrato, '--output', capa,
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) {
+    throw new Error(`A capa falhou: ${String(e.stderr || e.message).slice(0, 400)}`);
+  }
+} else {
+  // Sem bloco cover na configuracao, continua o comportamento antigo: um quadro do
+  // proprio Reel. Fica so como rede — nao e o que o padrao manda.
+  execFileSync('ffmpeg', [
+    '-y', '-hide_banner', '-loglevel', 'error',
+    '-ss', String(segundoDaCapa), '-i', temporario,
+    '-frames:v', '1', '-q:v', '2', '-update', '1', capa,
+  ], { stdio: 'pipe' });
+}
 
 /* ── Entrega ───────────────────────────────────────────────── */
 

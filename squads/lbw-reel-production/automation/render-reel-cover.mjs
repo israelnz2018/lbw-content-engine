@@ -42,6 +42,16 @@ const palettes = {
 if (!palettes[cover.courseKey]) throw new Error(`Curso de capa nao configurado: ${cover.courseKey}`);
 const palette = palettes[cover.courseKey];
 const series = escapeHtml(cover.seriesLabel || palette.label);
+// O assunto do rodape e a sigla de fundo vinham escritos no codigo — "AULA PRATICA
+// / MELHORIA CONTINUA" e "WB" —, o que servia para o video que estava sendo feito
+// naquele dia e para nenhum outro. Agora vem da configuracao, com o mesmo texto
+// de antes como padrao para nada mudar sem pedido.
+const topico = escapeHtml(cover.topicLabel || 'AULA PRÁTICA');
+const topicoForte = escapeHtml(cover.topicStrong || 'MELHORIA CONTÍNUA');
+const sigla = escapeHtml(
+  cover.ghost
+  || (cover.seriesLabel || palette.label).split(/\s+/).map((p) => p[0] || '').join('').slice(0, 3).toUpperCase(),
+);
 const episode = String(cover.episode || '').padStart(2, '0');
 const hookLines = cover.hookLines.map(escapeHtml);
 const logo = fileDataUrl(path.resolve(config.logoPath));
@@ -62,11 +72,11 @@ const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><sty
 .portrait-shell img{width:100%;height:100%;object-fit:cover;object-position:center 34%;transform:scale(1.13)}
 .topic{position:absolute;z-index:4;left:0;bottom:105px;width:400px;padding:23px 25px;border-radius:17px;color:#fff;background:${palette.ink};font-size:29px;line-height:1.07;font-weight:900;text-transform:uppercase}.topic strong{display:block;margin-top:6px;color:${palette.highlight};font-size:39px}
 .bottom-accent{position:absolute;left:55px;right:55px;bottom:44px;height:16px;border-radius:10px;background:${palette.ink}}.bottom-accent:after{content:'';position:absolute;right:0;top:0;width:260px;height:16px;border-radius:10px;background:${palette.highlight}}
-</style></head><body><main class="cover"><div class="top-field"><div class="ghost">WB</div></div><div class="top-line"></div><section class="safe">
+</style></head><body><main class="cover"><div class="top-field"><div class="ghost">${sigla}</div></div><div class="top-line"></div><section class="safe">
 <div class="brand"><div class="brand-badge"><img src="${logo}"></div><div class="brand-name">LBW · EDUCAÇÃO PELO TRABALHO</div></div>
 <div class="series-row"><span class="series">${series} ${escapeHtml(episode)}</span></div>
 <div class="hook">${hookLines.map(line => `<span class="line">${line}</span>`).join('')}</div><div class="rule"></div>
-<div class="portrait-shell"><img src="${portrait}"></div><div class="topic">AULA PRÁTICA<strong>MELHORIA CONTÍNUA</strong></div></section>
+<div class="portrait-shell"><img src="${portrait}"></div><div class="topic">${topico}<strong>${topicoForte}</strong></div></section>
 <div class="bottom-accent"></div></main></body></html>`;
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
