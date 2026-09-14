@@ -167,12 +167,44 @@ const PESSOAS_PADRAO = [
   '03-duvida-homem-40',
 ];
 
+/**
+ * Um numero estavel a partir de um texto.
+ *
+ * Estavel e a palavra: o MESMO criativo refeito tem de dar a MESMA peca. Por isso
+ * nao e sorteio — e uma conta sobre o slug, que nao muda.
+ */
+function semente(texto) {
+  let h = 2166136261;
+  for (let i = 0; i < texto.length; i++) {
+    h ^= texto.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  // Embaralha os bits altos para dentro dos baixos. Sem isto o resto da divisao
+  // usa so os tres bits finais, que mal mudam entre slugs parecidos: 300 criativos
+  // caiam em 4 das 8 pessoas, uma delas 168 vezes.
+  h ^= h >>> 16;
+  h = Math.imul(h, 2246822507);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489909);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+// De onde a rotacao de pessoas comeca NESTE carrossel.
+//
+// Antes comecava sempre do zero, e o resultado era que TODA capa saia com o mesmo
+// homem, toda pagina 2 com a mesma mulher, para sempre — quem publica todo dia
+// repete as mesmas oito caras a semana inteira. Agora o ponto de partida vem do
+// slug, entao criativos diferentes recebem pessoas diferentes, e o mesmo criativo
+// refeito continua identico.
+const PONTO_DE_PARTIDA = semente(slug) % PESSOAS_PADRAO.length;
+
 /** A pessoa do slide, ou uma do rodizio quando o slide nao pediu nenhuma. */
 function pessoaDoSlide(slide, indice) {
   if (slide.pessoa === false || slide.pessoa === 'nenhuma') return '';
   if (slide.pessoa) return pessoaUrl(slide.pessoa);
   if (!pessoasDisponiveis.length) return '';
-  return pessoaUrl(PESSOAS_PADRAO[indice % PESSOAS_PADRAO.length]);
+  return pessoaUrl(PESSOAS_PADRAO[(PONTO_DE_PARTIDA + indice) % PESSOAS_PADRAO.length]);
 }
 
 function escapeHtml(value) {
@@ -387,12 +419,37 @@ body{font-family:Arial,Helvetica,sans-serif}
 .tall .strip-sign{font-size:18px}
 `;
 
+/**
+ * Recalcula os font-size do CSS pela escala pedida.
+ *
+ * DEIXA O CABECALHO E O RODAPE DE FORA: a marca e a faixa de processo sao a
+ * moldura da peca, iguais em todas as paginas. Escalar junto faria o carrossel
+ * parecer ter sido montado em tamanhos diferentes, pagina a pagina.
+ */
+function escalarFontes(css, escala) {
+  if (escala === 1) return css;
+  return css.split('}').map((bloco) => {
+    const seletor = bloco.split('{')[0] || '';
+    if (/\.(strip|brand|dot)\b/.test(seletor)) return bloco;
+    return bloco.replace(
+      /font-size:(\d+(?:\.\d+)?)px/g,
+      (_, n) => `font-size:${(Number(n) * escala).toFixed(1)}px`,
+    );
+  }).join('}');
+}
+
 function slideHtml(slide, H = 1350, indice = 0) {
   const type = String(slide.type || 'padrao').toLowerCase();
   const build = BUILDERS[type] || bodyPadrao;
   const isDark = type === 'capa' || type === 'cta';
   const tall = H >= 1600 ? ' tall' : '';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${cssFor(H)}</style></head><body>
+  // A escala do texto desta pagina.
+  //
+  // Limitada porque abaixo de 0,8 nao se le no celular e acima de 1,25 estoura a
+  // pagina. Nao da para fazer isso com font-size no html: o CSS inteiro esta em
+  // px, e px nao herda escala. Entao as medidas sao recalculadas de verdade.
+  const escala = Math.min(1.25, Math.max(0.8, Number(slide.escala) || 1));
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${escalarFontes(cssFor(H), escala)}</style></head><body>
 <main class="page${isDark ? ' dark' : ''}${tall}">
   <header class="brand"><img src="${logo}"><span>${escapeHtml(NOME_DA_MARCA)}</span></header>
   ${build(slide, indice)}
@@ -485,17 +542,13 @@ if (video && video.enabled !== false) {
   fs.rmSync(frameDir, { recursive: true, force: true });
 }
 
-const content = [`# ${config.date} | ${config.slug}`, '', ...config.slides.flatMap((slide, i) => [`## Página ${i + 1}`, '', plain(slide.title), '', plain(slide.body), ''])].join('\n');
-// A legenda acompanha cada peça, em toda pasta que recebeu algo desta campanha.
-// Só recebe legenda a pasta que de fato recebeu peça desta campanha.
-const destinosLegenda = [feedDir, linkedinDir, ...(videoPath ? [reelsDir] : [])];
-const legendas = [];
-for (const d of destinosLegenda) {
-  const p = path.join(d, 'legenda.md');
-  fs.writeFileSync(p, content, 'utf8');
-  legendas.push(p);
-}
-const contentPath = legendas[0];
+// A legenda NAO sai mais como arquivo .md.
+//
+// Ela virava um legenda.md dentro de cada pasta e ninguem usava: o consultor nao
+// tem o que fazer com um markdown, e na tela ele so atrapalhava a lista de
+// arquivos da peca. O texto para publicar agora e escrito na plataforma, editavel,
+// e vive no criativo — que e onde ele pode ser revisado e copiado.
+const contentPath = null;
 await browser.close();
 
 console.log(JSON.stringify({ campanha: base, feedDir, slides: pngPaths.length, pngPaths, videoPath, pdfPath, contentPath }, null, 2));

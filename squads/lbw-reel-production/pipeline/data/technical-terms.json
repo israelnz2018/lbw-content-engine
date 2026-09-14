@@ -15,7 +15,10 @@
     },
     {
       "canonical": "LEAN",
-      "variants": ["lean", "lin", "lincig", "linsic", "linic", "liga", "inc"]
+      "variants": ["lean", "lin", "lincig", "linsic", "linic", "liga", "inc"],
+      "contextVariants": [
+        { "variant": "li", "after": "não é uma metodologia" }
+      ]
     },
     {
       "canonical": "WHITE BELT",

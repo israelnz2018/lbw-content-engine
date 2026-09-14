@@ -49,6 +49,15 @@ function Normalize-TechnicalTerms([string]$Text) {
     $pattern = '(?i)(?<!\p{L})' + [regex]::Escape($replacement.Variant) + '(?!\p{L})'
     $Text = [regex]::Replace($Text, $pattern, $replacement.Canonical)
   }
+  # Algumas palavras curtas do reconhecimento automático só podem ser
+  # corrigidas com contexto para não alterar palavras comuns do português.
+  foreach ($term in $technicalTerms.terms) {
+    foreach ($context in @($term.contextVariants)) {
+      if ([string]::IsNullOrWhiteSpace([string]$context.variant) -or [string]::IsNullOrWhiteSpace([string]$context.after)) { continue }
+      $pattern = '(?i)(?<!\p{L})' + [regex]::Escape([string]$context.variant) + '(?=\s+' + [regex]::Escape([string]$context.after) + '(?!\p{L}))'
+      $Text = [regex]::Replace($Text, $pattern, [string]$term.canonical)
+    }
+  }
   return $Text
 }
 
@@ -58,16 +67,40 @@ $clipEndMs = Convert-TimeToMilliseconds $ClipEnd
 if ($clipEndMs -le $clipStartMs) { throw 'ClipEnd deve ser posterior a ClipStart.' }
 
 $json = Get-Content -Raw -Encoding UTF8 $jsonFile | ConvertFrom-Json
+# O JSON3 pode dividir uma expressão em eventos separados. Corrige em memória
+# o caso conhecido "O LI não é uma metodologia" sem tratar "LI" como LEAN global.
+$previousEventTextForContext = ''
+foreach ($eventForContext in $json.events) {
+  if ($null -eq $eventForContext.segs -or $eventForContext.segs.Count -eq 0) { continue }
+  $currentEventTextForContext = (($eventForContext.segs | ForEach-Object { Repair-Utf8Mojibake ([string]$_.utf8) }) -join ' ').Trim()
+  if ($currentEventTextForContext -match '(?i)^LI\s+não\s+é\s+uma\s+metodologia\b' -and
+      $previousEventTextForContext.TrimEnd().EndsWith('O', [StringComparison]::OrdinalIgnoreCase)) {
+    $eventForContext.segs[0].utf8 = 'LEAN'
+  }
+  if (-not [string]::IsNullOrWhiteSpace($currentEventTextForContext)) { $previousEventTextForContext = $currentEventTextForContext }
+}
 $words = [System.Collections.Generic.List[object]]::new()
 $lastWordNormalized = $LastWord.TrimEnd(',', '.', ';', '?', '!')
+$previousNonEmptyEventText = ''
 
 foreach ($event in $json.events) {
   if ($null -eq $event.segs -or $event.segs.Count -eq 0) { continue }
+  $eventText = (($event.segs | ForEach-Object { Repair-Utf8Mojibake ([string]$_.utf8) }) -join ' ').Trim()
+  $eventStartsWithContextualLean = ($eventText -match '(?i)^LI\s+não\s+é\s+uma\s+metodologia\b') -and
+    $previousNonEmptyEventText.TrimEnd().EndsWith('O', [StringComparison]::OrdinalIgnoreCase)
   foreach ($segment in $event.segs) {
     $text = Repair-Utf8Mojibake (([string]$segment.utf8).Trim())
     # Normaliza os nomes técnicos antes de separar as palavras e criar o karaoke.
     # Assim, erros recorrentes do reconhecimento automático não chegam à legenda final.
     $text = Normalize-TechnicalTerms $text
+    # Neste ponto o evento já foi validado pelo pré-processamento contextual:
+    # a única ocorrência de LI neste trecho representa LEAN.
+    if ($text -ieq 'LI' -and $eventText.ToUpperInvariant().Contains('LI NÃO É UMA METODOLOGIA')) { $text = 'LEAN' }
+    # Correções específicas do trecho White Belt 03, sem transformar "li"
+    # em LEAN em outras frases comuns do português.
+    if ($event.tStartMs -eq 1856399 -and $text -ieq 'LI') { $text = 'LEAN' }
+    if ($event.tStartMs -eq 1848679 -and $text -ieq 'LIMANU') { $text = 'LEAN' }
+    if ($event.tStartMs -eq 1848679 -and $text -ieq 'FACTOR,') { $text = 'MANUFACTURING,' }
     # O dicionário controlado corrige somente nomes técnicos. O áudio original permanece intacto.
     if ([string]::IsNullOrWhiteSpace($text)) { continue }
     $offset = 0
@@ -92,6 +125,7 @@ foreach ($event in $json.events) {
       }
     }
   }
+  if (-not [string]::IsNullOrWhiteSpace($eventText)) { $previousNonEmptyEventText = $eventText }
 }
 
 $words = @($words | Sort-Object StartMs | Group-Object { "{0}|{1}" -f $_.StartMs, $_.Text } | ForEach-Object { $_.Group[0] })
