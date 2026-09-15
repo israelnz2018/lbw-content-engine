@@ -17,6 +17,7 @@ const COLECOES = {
   campanhas: 'marketing_campanhas',
   pecas: 'marketing_pecas',
   tarefas: 'marketing_tarefas',
+  imagens: 'marketing_imagens',
 };
 
 function credencial() {

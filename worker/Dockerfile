@@ -32,8 +32,14 @@ COPY worker/package.json ./worker/
 RUN cd worker && npm install --omit=dev
 
 # Os renderizadores tambem tem dependencias proprias (Playwright, recorte de fundo).
+#
+# --ignore-scripts impede o onnxruntime de baixar os binarios de CUDA, que nao
+# servem aqui (o de CPU ja vem no pacote). Mas ele tambem impedia o sharp de baixar
+# o binario dele, e sem esse binario o recorte de fundo morre na primeira imagem.
+# Por isso o sharp e reconstruido sozinho, com o script dele.
 COPY package.json ./
-RUN npm install --omit=dev --ignore-scripts
+RUN npm install --omit=dev --ignore-scripts \
+ && npm rebuild sharp
 
 # O motor: squads, renderizadores e marca.
 COPY squads/ ./squads/

@@ -14,6 +14,9 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { enviarPasta } from './storage.mjs';
 import { gravarPeca, atualizarCampanha, lerCampanha, lerPeca } from './firestore.mjs';
+import {
+  resolverImagensDoRender, imagensPorPagina, registrarUso, prepararImagem as prepararImagemDaBiblioteca,
+} from './imagens.mjs';
 
 const execFileAsync = promisify(execFile);
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -71,14 +74,30 @@ export async function gerarCampanha(tarefa) {
   try {
     await atualizarCampanha(campanhaId, { status: 'processando' });
 
-    const renderConfig = { ...(tarefa.render || {}), outputRoot: temp };
+    // As imagens escolhidas na biblioteca chegam como id; o renderizador recebe o
+    // endereço delas.
+    const { render, usos } = await resolverImagensDoRender(tarefa.render || {}, consultorId);
+    const renderConfig = { ...render, outputRoot: temp };
 
     const configPath = path.join(temp, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
 
     const resultado = await rodarRenderizador(RENDERIZADORES.carrossel, configPath);
+    const porPagina = imagensPorPagina(resultado?.pessoas, usos);
+    await registrarUso(porPagina).catch((e) => console.warn(`aviso: uso das imagens não registrado (${e.message})`));
 
-    // Sobe o que foi gerado, uma pasta por tipo de peça.
+    // CADA PRODUÇÃO VAI PARA UMA PASTA NOVA.
+    //
+    // Antes as páginas eram gravadas sempre no mesmo caminho — .../feed/slide-05.png.
+    // O endereço do Storage não muda quando o arquivo é sobrescrito, então o
+    // navegador continuava mostrando a versão em cache: o consultor tirava a pessoa
+    // de uma página, mandava refazer, a produção rodava certo e a tela exibia a
+    // imagem de antes. De fora, "o botão não fez nada" — o mesmo engano que já
+    // tinha custado caro na capa do Reel.
+    //
+    // O carimbo de tempo no caminho resolve sem depender de cabeçalho de cache nem
+    // de o consultor saber dar refresh forçado.
+    const versaoDaProducao = Date.now();
     const pecas = [];
     for (const tipo of ['FEED', 'REELS', 'LINKEDIN']) {
       const pasta = path.join(temp, tipo);
@@ -87,7 +106,7 @@ export async function gerarCampanha(tarefa) {
       // Dentro de cada tipo há uma pasta por campanha.
       for (const sub of fs.readdirSync(pasta)) {
         const caminhos = await enviarPasta(path.join(pasta, sub), {
-          consultorId, campanhaId, tipo: tipo.toLowerCase(),
+          consultorId, campanhaId, tipo: `${tipo.toLowerCase()}/v${versaoDaProducao}`,
         });
         if (!caminhos.length) continue;
 
@@ -110,7 +129,13 @@ export async function gerarCampanha(tarefa) {
       }
     }
 
-    await atualizarCampanha(campanhaId, { status: 'revisar' });
+    // Quem da biblioteca apareceu em cada página vai para a campanha — só quando
+    // alguma imagem da biblioteca foi usada. Carrossel sem escolha grava o mesmo de
+    // sempre.
+    await atualizarCampanha(campanhaId, {
+      status: 'revisar',
+      ...(porPagina.some(Boolean) ? { imagensPorPagina: porPagina } : {}),
+    });
     return { pecas: pecas.length, resultado };
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
@@ -131,7 +156,8 @@ export async function regerarPeca(tarefa) {
   try {
     await gravarPeca({ ...peca, status: 'gerando' });
 
-    const renderConfig = { ...(tarefa.render || {}), outputRoot: temp };
+    const { render } = await resolverImagensDoRender(tarefa.render || {}, consultorId);
+    const renderConfig = { ...render, outputRoot: temp };
 
     const configPath = path.join(temp, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
@@ -321,9 +347,48 @@ export async function gerarCapa(tarefa) {
   }
 }
 
+/**
+ * Uma página só do carrossel, para a prévia de uma imagem candidata.
+ *
+ * Sem PDF e sem vídeo: é para o consultor julgar a imagem NA página, e isso custa
+ * dois segundos em vez do minuto da produção inteira.
+ */
+async function renderizarPagina(render, pagina, temp) {
+  const saida = path.join(temp, `previa-${pagina}`);
+  const configPath = path.join(temp, `previa-${pagina}.json`);
+  fs.writeFileSync(configPath, JSON.stringify({
+    ...render,
+    somentePagina: pagina,
+    video: { enabled: false },
+    outputRoot: saida,
+  }, null, 2), 'utf8');
+  const resultado = await rodarRenderizador(RENDERIZADORES.carrossel, configPath);
+  const png = resultado?.pngPaths?.[0];
+  return png && fs.existsSync(png) ? png : null;
+}
+
+/**
+ * Deixa pronta uma imagem da biblioteca: gerada pela IA ou enviada pelo consultor.
+ *
+ * Pessoa perde o fundo; cena só é ajustada. Quando a imagem nasceu para uma página,
+ * a página sai montada com ela — é o que o consultor aprova.
+ */
+export async function prepararImagem(tarefa) {
+  const temp = pastaTemporaria('imagem');
+  try {
+    return await prepararImagemDaBiblioteca(tarefa, {
+      temp,
+      renderizarPagina: (render, pagina) => renderizarPagina(render, pagina, temp),
+    });
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+}
+
 export const EXECUTORES = {
   'gerar-campanha': gerarCampanha,
   'regerar-peca': regerarPeca,
   'gerar-reel': gerarReel,
   'gerar-capa': gerarCapa,
+  'preparar-imagem': prepararImagem,
 };

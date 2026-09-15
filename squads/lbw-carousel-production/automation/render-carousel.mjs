@@ -83,6 +83,12 @@ async function logoDaMarca() {
 const logo = await logoDaMarca();
 if (!logo) throw new Error('Logo oficial não encontrada.');
 
+// O cabecalho leva o NOME DA MARCA, nao o nome da pessoa.
+//
+// Passou a sair "ISRAEL CAVALCANTI DE SOUZA" porque a plataforma manda o nome do
+// cadastro de Minha Marca, que e o nome civil do consultor. Assinatura de peca e
+// marca, nao identidade: quem le quer saber de quem e o conteudo, e isso e a
+// empresa. Sem nome na configuracao, fica o padrao da casa.
 const NOME_DA_MARCA = String(MARCA.nome || 'EDUCAÇÃO PELO TRABALHO').toUpperCase();
 
 /* ── A paleta ──────────────────────────────────────────────── */
@@ -139,8 +145,42 @@ const projectRoot = path.resolve(squadRoot, '..', '..');
 const PESSOAS_DIR = path.resolve(projectRoot, 'assets/pessoas/recortadas');
 const pessoasDisponiveis = fs.existsSync(PESSOAS_DIR) ? fs.readdirSync(PESSOAS_DIR).filter(f => f.endsWith('.png')) : [];
 
+// ── Imagens que chegam por endereço ──────────────────────────
+//
+// A biblioteca deixou de caber na pasta do projeto: imagem gerada e foto enviada
+// pelo consultor vivem no Storage, e o worker manda o endereço delas. Os corpos das
+// paginas sao funcoes sincronas, entao tudo que vem da web e baixado ANTES do laco
+// de renderizacao e fica guardado aqui, ja como data URL.
+const imagensBaixadas = new Map();
+
+const ehEndereco = (ref) => /^https?:\/\//i.test(String(ref || ''));
+
+async function baixarImagens(refs) {
+  for (const ref of new Set(refs.filter(ehEndereco))) {
+    try {
+      const resposta = await fetch(ref);
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const tipo = (resposta.headers.get('content-type') || 'image/png').split(';')[0];
+      const bytes = Buffer.from(await resposta.arrayBuffer());
+      imagensBaixadas.set(ref, `data:${tipo};base64,${bytes.toString('base64')}`);
+    } catch (e) {
+      // Imagem que nao baixa nao derruba o carrossel: a pagina sai sem ela, e o
+      // layout sem pessoa ja foi desenhado para ficar bom sozinho.
+      console.warn(`aviso: nao consegui baixar a imagem ${ref.split('?')[0]} (${e.message})`);
+    }
+  }
+}
+
+/** Uma imagem qualquer — de fundo, por exemplo — a partir de endereco ou arquivo. */
+function imagemUrl(ref) {
+  if (!ref) return '';
+  if (ehEndereco(ref)) return imagensBaixadas.get(ref) || '';
+  return dataUrl(resolveAsset(ref));
+}
+
 function pessoaUrl(ref) {
   if (!ref) return '';
+  if (ehEndereco(ref)) return imagensBaixadas.get(ref) || '';
   const direct = resolveAsset(ref);
   if (direct && fs.existsSync(direct)) return dataUrl(direct);
   const key = String(ref).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -197,14 +237,49 @@ function semente(texto) {
 // repete as mesmas oito caras a semana inteira. Agora o ponto de partida vem do
 // slug, entao criativos diferentes recebem pessoas diferentes, e o mesmo criativo
 // refeito continua identico.
-const PONTO_DE_PARTIDA = semente(slug) % PESSOAS_PADRAO.length;
+//
+// O RODIZIO VEM DA BIBLIOTECA quando o worker manda uma. Sem ela — rodando na
+// maquina, por exemplo — continua valendo o elenco da pasta, como sempre foi.
+const RODIZIO = Array.isArray(config.pessoasAutomaticas) && config.pessoasAutomaticas.length
+  ? config.pessoasAutomaticas.map(String)
+  : PESSOAS_PADRAO;
+const PONTO_DE_PARTIDA = semente(slug) % RODIZIO.length;
+
+// NO MAXIMO DUAS PESSOAS POR CARROSSEL, quando ninguem escolheu.
+//
+// Antes toda pagina que comportava figura ganhava uma, e o carrossel saia com
+// cinco ou seis pessoas diferentes — gente demais para uma ideia so, e a peca
+// passava a parecer um catalogo de banco de imagens em vez de conteudo.
+//
+// Sao a CAPA e o FECHO: a primeira, que e a miniatura no feed, e a ultima, que e
+// onde a pessoa olha para quem fala. O miolo fica de texto, que agora ocupa a
+// pagina inteira sozinho.
+//
+// Escolha explicita do consultor nao entra nesta conta: se ele pediu alguem numa
+// pagina do meio, e porque quis.
+const MAX_PESSOAS_AUTOMATICAS = 2;
+
+/**
+ * QUEM aparece na pagina — o nome, o caminho ou o endereco, ainda sem carregar.
+ *
+ * Separado de carregar porque as imagens da web precisam ser baixadas antes de a
+ * pagina ser montada, e para baixar e preciso saber quais sao.
+ */
+function refDaPessoa(slide, indice, total) {
+  if (slide.pessoa === false || slide.pessoa === 'nenhuma') return '';
+  if (slide.pessoa) return String(slide.pessoa);
+  if (RODIZIO === PESSOAS_PADRAO && !pessoasDisponiveis.length) return '';
+
+  const ultima = Math.max(0, Number(total) - 1);
+  const automaticas = [0, ultima].slice(0, MAX_PESSOAS_AUTOMATICAS);
+  if (!automaticas.includes(indice)) return '';
+
+  return RODIZIO[(PONTO_DE_PARTIDA + indice) % RODIZIO.length];
+}
 
 /** A pessoa do slide, ou uma do rodizio quando o slide nao pediu nenhuma. */
-function pessoaDoSlide(slide, indice) {
-  if (slide.pessoa === false || slide.pessoa === 'nenhuma') return '';
-  if (slide.pessoa) return pessoaUrl(slide.pessoa);
-  if (!pessoasDisponiveis.length) return '';
-  return pessoaUrl(PESSOAS_PADRAO[(PONTO_DE_PARTIDA + indice) % PESSOAS_PADRAO.length]);
+function pessoaDoSlide(slide, indice, total) {
+  return pessoaUrl(refDaPessoa(slide, indice, total));
 }
 
 function escapeHtml(value) {
@@ -237,8 +312,8 @@ function stripMarkup() {
 }
 
 // ── Corpos por tipo de slide ─────────────────────────────────
-function bodyCapa(slide, i) {
-  const img = pessoaDoSlide(slide, i);
+function bodyCapa(slide, i, total) {
+  const img = pessoaDoSlide(slide, i, total);
   const sub = slide.sub ? `<div class="sub"><span class="sub-mark">?</span><span>${rich(slide.sub)}</span></div>` : '';
   return `<section class="main capa${img ? '' : ' sozinho'}">
     <div class="capa-text">
@@ -266,8 +341,8 @@ function bodyCamadas(slide) {
   </section>`;
 }
 
-function bodyDado(slide, i) {
-  const img = pessoaDoSlide(slide, i);
+function bodyDado(slide, i, total) {
+  const img = pessoaDoSlide(slide, i, total);
   const fonte = slide.fonte ? `<div class="fonte">Fonte: ${escapeHtml(slide.fonte)}</div>` : '';
   return `<section class="main light dado${img ? '' : ' sozinho'}">
     <div class="dado-text">
@@ -292,8 +367,8 @@ function bodyComparacao(slide) {
   </section>`;
 }
 
-function bodyCta(slide, i) {
-  const img = pessoaDoSlide(slide, i);
+function bodyCta(slide, i, total) {
+  const img = pessoaDoSlide(slide, i, total);
   // O "Comente 'PALAVRA'" saiu. Pedir comentario com uma palavra-chave e isca de
   // engajamento: quem le sabe que e isca, e a pagina de fecho fica valendo menos
   // do que a ideia que ela deveria fechar. O fecho agora e o proprio texto.
@@ -307,8 +382,8 @@ function bodyCta(slide, i) {
   </section>`;
 }
 
-function bodyPadrao(slide, i) {
-  const img = pessoaDoSlide(slide, i);
+function bodyPadrao(slide, i, total) {
+  const img = pessoaDoSlide(slide, i, total);
   return `<section class="main light dado${img ? '' : ' sozinho'}">
     <div class="dado-text">
       <h1 class="title dark">${rich(slide.title)}</h1>
@@ -318,7 +393,36 @@ function bodyPadrao(slide, i) {
   </section>`;
 }
 
-const BUILDERS = { capa: bodyCapa, camadas: bodyCamadas, dado: bodyDado, comparacao: bodyComparacao, cta: bodyCta, padrao: bodyPadrao };
+/**
+ * Uma cena de fundo — chao de fabrica, quadro de indicadores, reuniao — com o texto
+ * por cima.
+ *
+ * A pessoa recortada nao serve para isso: ela foi desenhada para ficar AO LADO do
+ * texto, sem fundo. Uma cena tem fundo, entao ocupa a pagina, e um veu na cor da
+ * marca escurece a parte de baixo para o texto continuar legivel sobre qualquer
+ * foto. Sem foto, a pagina sai como pagina de texto escura, e nao com um buraco.
+ */
+function bodyFoto(slide) {
+  const fundo = imagemUrl(slide.fundo);
+  return `<section class="main foto${fundo ? '' : ' sem-foto'}">
+    ${fundo ? `<img class="foto-fundo" src="${fundo}" alt="">` : ''}
+    <div class="foto-veu"></div>
+    <div class="foto-text">
+      <h1 class="title">${rich(slide.title)}</h1>
+      <div class="rule"></div>
+      <p class="body">${rich(slide.body)}</p>
+    </div>
+  </section>`;
+}
+
+const BUILDERS = { capa: bodyCapa, camadas: bodyCamadas, dado: bodyDado, comparacao: bodyComparacao, cta: bodyCta, padrao: bodyPadrao, foto: bodyFoto };
+
+/** A cor da marca com transparencia, para o veu da foto. */
+function rgba(hex, alfa) {
+  const x = String(hex).replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16));
+  return `rgba(${r},${g},${b},${alfa})`;
+}
 
 const cssFor = (H) => `
 *{box-sizing:border-box}
@@ -397,6 +501,22 @@ body{font-family:Arial,Helvetica,sans-serif}
 .main.sozinho .sub-mark{flex:0 0 56px;height:56px;font-size:33px}
 .main.sozinho .fonte{font-size:28px}
 
+/* ── Foto de fundo ──────────────────────────────────────────────
+   O veu comeca quase transparente em cima, para a cena aparecer, e fecha na cor
+   da marca embaixo, onde fica o texto. */
+.main.foto{position:relative;flex-direction:column;justify-content:flex-end;padding:0;overflow:hidden;background:${C.navy}}
+.foto-fundo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
+.foto-veu{position:absolute;inset:0;background:linear-gradient(180deg,${rgba(C.navy, 0.05)} 0%,${rgba(C.navy, 0.35)} 38%,${rgba(C.navy, 0.9)} 66%,${rgba(C.navy, 0.97)} 100%)}
+.foto-text{position:relative;z-index:2;display:flex;flex-direction:column;padding:0 54px 46px}
+.foto .title{font-size:80px}
+.foto .body{color:#fff}
+.main.foto.sem-foto{justify-content:center}
+.main.foto.sem-foto .foto-veu{display:none}
+.main.foto.sem-foto .title{font-size:104px}
+.main.foto.sem-foto .body{font-size:46px}
+.tall .foto .title{font-size:98px}
+.tall .foto-text{padding:0 54px 64px}
+
 /* No 9:16 a pagina ja e mais alta: sem pessoa, cresce mais ainda. */
 .tall .main.sozinho .title{font-size:124px}
 .tall .main.sozinho .title.small{font-size:88px}
@@ -467,7 +587,8 @@ function escalarFontes(css, escala) {
 function slideHtml(slide, H = 1350, indice = 0) {
   const type = String(slide.type || 'padrao').toLowerCase();
   const build = BUILDERS[type] || bodyPadrao;
-  const isDark = type === 'capa' || type === 'cta';
+  const total = Number(config.slides?.length) || 0;
+  const isDark = type === 'capa' || type === 'cta' || type === 'foto';
   const tall = H >= 1600 ? ' tall' : '';
   // A escala do texto desta pagina.
   //
@@ -478,7 +599,7 @@ function slideHtml(slide, H = 1350, indice = 0) {
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${escalarFontes(cssFor(H), escala)}</style></head><body>
 <main class="page${isDark ? ' dark' : ''}${tall}">
   <header class="brand"><img src="${logo}"><span>${escapeHtml(NOME_DA_MARCA)}</span></header>
-  ${build(slide, indice)}
+  ${build(slide, indice, total)}
   ${stripMarkup()}
 </main></body></html>`;
 }
@@ -502,6 +623,23 @@ async function ajustarRodape(pagina) {
   });
 }
 
+// UMA PAGINA SO, para a previa de uma imagem candidata.
+//
+// Aprovar uma imagem solta engana: a foto bonita pode ficar ruim NA PAGINA — rosto
+// cortado pela coluna, cor brigando com a marca. Entao a candidata e mostrada ja
+// montada. Renderizar o carrossel inteiro, o PDF e o video para isso custaria um
+// minuto; uma pagina custa dois segundos.
+const SOMENTE = config.somentePagina;
+const somentePagina = Number.isInteger(SOMENTE) ? SOMENTE : null;
+if (somentePagina !== null && (somentePagina < 0 || somentePagina >= config.slides.length)) {
+  throw new Error(`somentePagina ${somentePagina} fora do carrossel de ${config.slides.length} páginas.`);
+}
+
+// Quem aparece em cada pagina. Vai no resultado para o worker contar o uso de cada
+// imagem da biblioteca — e e a mesma conta que as paginas usam, nao uma copia.
+const pessoasPorPagina = config.slides.map((s, i) => refDaPessoa(s, i, config.slides.length) || null);
+await baixarImagens([...pessoasPorPagina, ...config.slides.map((s) => s.fundo)].filter(Boolean));
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1080, height: 1350 }, deviceScaleFactor: 1 });
 const pngPaths = [];
@@ -510,6 +648,7 @@ for (let index = 0; index < config.slides.length; index++) {
   const slide = config.slides[index];
   const wordCount = `${plain(slide.title)} ${plain(slide.body)}`.trim().split(/\s+/).filter(Boolean).length;
   if (wordCount > 32) throw new Error(`Página ${index + 1} excede 32 palavras.`);
+  if (somentePagina !== null && index !== somentePagina) continue;
   await page.setContent(slideHtml(slide, 1350, index), { waitUntil: 'load' });
   await page.evaluate(() => window.scrollTo(0, 0));
   await ajustarRodape(page);
@@ -517,6 +656,16 @@ for (let index = 0; index < config.slides.length; index++) {
   const destination = path.join(feedDir, filename);
   await page.screenshot({ path: destination, type: 'png' });
   pngPaths.push(destination);
+}
+
+if (somentePagina !== null) {
+  await browser.close();
+  fs.rmSync(linkedinDir, { recursive: true, force: true });
+  // Sai so DEPOIS de a saida chegar ao worker. process.exit logo apos console.log
+  // corta o texto quando a saida e um pipe, e o worker leria um JSON pela metade.
+  const saida = JSON.stringify({ campanha: base, feedDir, slides: pngPaths.length, pngPaths, somentePagina, pessoas: pessoasPorPagina }, null, 2);
+  await new Promise((pronto) => process.stdout.write(`${saida}\n`, pronto));
+  process.exit(0);
 }
 
 const pdfPages = pngPaths.map(file => `<section><img src="${dataUrl(file)}"></section>`).join('');
@@ -577,4 +726,4 @@ if (video && video.enabled !== false) {
 const contentPath = null;
 await browser.close();
 
-console.log(JSON.stringify({ campanha: base, feedDir, slides: pngPaths.length, pngPaths, videoPath, pdfPath, contentPath }, null, 2));
+console.log(JSON.stringify({ campanha: base, feedDir, slides: pngPaths.length, pngPaths, videoPath, pdfPath, contentPath, pessoas: pessoasPorPagina }, null, 2));

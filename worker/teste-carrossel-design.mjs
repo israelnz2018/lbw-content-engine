@@ -114,5 +114,54 @@ conferir('a faixa do rodape NAO cresce', (g.match(/font-size:16px/g) || []).leng
 const p = escalarFontes(css, 0.8);
 conferir('encolher tambem funciona', p.includes('font-size:62.4px'));
 
+/* ── No maximo duas pessoas automaticas: capa e fecho ───────── */
+// A funcao roda como esta no renderizador; so o que vem de fora dela e simulado.
+const MAX = Number((fonte.match(/const MAX_PESSOAS_AUTOMATICAS = (\d+);/) || [])[1]);
+const contextoPessoas = (rodizio) => {
+  const c = vm.createContext({
+    Math, Number, String,
+    PESSOAS_PADRAO,
+    RODIZIO: rodizio,
+    PONTO_DE_PARTIDA: 0,
+    pessoasDisponiveis: PESSOAS_PADRAO,
+    pessoaUrl: (nome) => (nome ? `url:${nome}` : ''),
+    MAX_PESSOAS_AUTOMATICAS: MAX,
+    globalThis: null,
+  });
+  c.globalThis = c;
+  vm.runInContext(extrair('refDaPessoa') + extrair('pessoaDoSlide'), c);
+  return c;
+};
+const { pessoaDoSlide } = contextoPessoas(PESSOAS_PADRAO);
+
+console.log(`\nmaximo de pessoas automaticas: ${MAX}`);
+const comPessoa = (slides) => slides
+  .map((s, i) => (pessoaDoSlide(s, i, slides.length) ? i : null))
+  .filter((i) => i !== null);
+
+const sete = Array.from({ length: 7 }, () => ({}));
+conferir('carrossel de 7 paginas sai com 2 pessoas, na capa e no fecho',
+  comPessoa(sete).join(',') === '0,6', `com pessoa: ${comPessoa(sete).join(',')}`);
+conferir('carrossel de 1 pagina sai com a pessoa so na capa',
+  comPessoa([{}]).join(',') === '0', `com pessoa: ${comPessoa([{}]).join(',')}`);
+const escolhida = sete.map((s, i) => (i === 3 ? { pessoa: 'fulana.png' } : s));
+conferir('pessoa escolhida no miolo continua e nao conta no limite',
+  comPessoa(escolhida).join(',') === '0,3,6', `com pessoa: ${comPessoa(escolhida).join(',')}`);
+const capaSemNinguem = sete.map((s, i) => (i === 0 ? { pessoa: 'nenhuma' } : s));
+conferir('"nenhuma" na capa tira a pessoa sem puxar outra para o miolo',
+  comPessoa(capaSemNinguem).join(',') === '6', `com pessoa: ${comPessoa(capaSemNinguem).join(',')}`);
+
+// A biblioteca do worker substitui o elenco da pasta, com as MESMAS posicoes.
+const daBiblioteca = contextoPessoas(['https://armazem/a.png', 'https://armazem/b.png']);
+const refs = sete.map((s, i) => daBiblioteca.refDaPessoa(s, i, sete.length));
+conferir('com biblioteca, a pessoa automatica vem dela',
+  refs[0] === 'https://armazem/a.png' && refs[6].startsWith('https://armazem/'), `refs: ${refs.join(' | ')}`);
+conferir('com biblioteca, o miolo continua sem pessoa',
+  refs.slice(1, 6).every((r) => r === ''), `refs: ${refs.join(' | ')}`);
+const vazio = contextoPessoas(PESSOAS_PADRAO);
+vazio.pessoasDisponiveis = [];
+conferir('sem biblioteca e sem pasta, ninguem aparece (e nada quebra)',
+  sete.every((s, i) => vazio.refDaPessoa(s, i, sete.length) === ''));
+
 console.log(`\n${falhas === 0 ? 'TODOS OS TESTES PASSARAM' : `${falhas} TESTE(S) FALHARAM`}`);
 process.exit(falhas === 0 ? 0 : 1);
