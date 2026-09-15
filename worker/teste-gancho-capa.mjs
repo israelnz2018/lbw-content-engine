@@ -85,7 +85,7 @@ for (const t of ['Sua mentalidade é de Melhoria Contínua?', 'Lean Six Sigma é
   console.log(`  "${t}" -> ${JSON.stringify(ganchoDoTitulo(t))}`);
 }
 
-console.log('\ncasos que devem devolver vazio (e o servidor recusa com aviso):');
+console.log('\ncasos que devem devolver vazio (a capa sai sem gancho):');
 for (const t of ['', '   ']) {
   const r = ganchoDoTitulo(t);
   const ok = r.length === 0;
@@ -93,10 +93,11 @@ for (const t of ['', '   ']) {
   console.log(`${ok ? 'ok  ' : 'FALHA'} titulo vazio -> ${JSON.stringify(r)}`);
 }
 
-// Titulo de 1 ou 2 palavras nao chega a 3: o servidor tem de recusar, nao gerar torto.
+// Titulo de 1 ou 2 palavras nao chega a 3. Nao e mais recusado — nada na capa e
+// obrigatorio —, a tela so avisa que o padrao recomenda de 3 a 6.
 const curto = ganchoDoTitulo('Melhoria');
 const palavrasCurto = curto.join(' ').split(/\s+/).filter(Boolean).length;
-console.log(`\ntitulo de uma palavra -> ${palavrasCurto} palavra(s); o servidor recusa abaixo de 3.`);
+console.log(`\ntitulo de uma palavra -> ${palavrasCurto} palavra(s); a tela avisa, a capa sai assim mesmo.`);
 
 console.log(`\n${falhas === 0 ? 'O GANCHO SEMPRE CABE NO PADRAO.' : `${falhas} FALHA(S)`}`);
 process.exit(falhas === 0 ? 0 : 1);

@@ -24,11 +24,15 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const cover = config.cover;
 
 if (!cover || cover.mode !== 'dedicated') throw new Error('A configuracao cover.mode deve ser "dedicated".');
-if (!Array.isArray(cover.hookLines) || cover.hookLines.length < 1 || cover.hookLines.length > 3) {
-  throw new Error('cover.hookLines deve ter entre 1 e 3 linhas.');
-}
-const hookWordCount = cover.hookLines.join(' ').trim().split(/\s+/).filter(Boolean).length;
-if (hookWordCount < 3 || hookWordCount > 6) throw new Error('O gancho da capa deve ter entre 3 e 6 palavras.');
+// NADA NA CAPA E OBRIGATORIO, nem o gancho.
+//
+// "3 a 6 palavras em ate 3 linhas" continua sendo a recomendacao do padrao — a tela
+// avisa —, mas recusar a capa por isso fazia o consultor perder a arte inteira por
+// causa de uma palavra. Gancho vazio sai sem gancho; gancho comprido encolhe ate
+// caber (ver ajustarGancho).
+const ganchoInformado = (Array.isArray(cover.hookLines) ? cover.hookLines : [])
+  .map((l) => String(l ?? '').trim())
+  .filter(Boolean);
 // O EPISODIO E OPCIONAL. Exigir dois digitos fazia a capa ser recusada por um
 // campo que nem sempre tem sentido — nem toda peca pertence a uma serie numerada,
 // e o consultor que apagava o numero via ele voltar sozinho. Quando vem, e
@@ -63,7 +67,7 @@ const sigla = escapeHtml(
   ?? String(cover.seriesLabel ?? palette.label).split(/\s+/).map((p) => p[0] || '').join('').slice(0, 3).toUpperCase(),
 );
 const episode = episodioInformado ? episodioInformado.padStart(2, '0') : '';
-const hookLines = cover.hookLines.map(escapeHtml);
+const hookLines = ganchoInformado.map(escapeHtml);
 const logo = fileDataUrl(path.resolve(config.logoPath));
 const portrait = fileDataUrl(portraitPath);
 
@@ -118,8 +122,14 @@ async function ajustarGancho(pagina) {
       return l.getBoundingClientRect().height < fonte * 1.35;
     });
 
+    // Tambem nao pode descer sobre o retrato: com o gancho livre, quatro ou cinco
+    // linhas cabem na largura e ainda assim invadiriam a foto. O retrato comeca em
+    // 600px dentro da area segura; o gancho para antes, deixando lugar para a regua.
+    const LIMITE_EMBAIXO = 540;
+    const cabeNaAltura = () => gancho.offsetTop + gancho.offsetHeight <= LIMITE_EMBAIXO;
+
     let tamanho = 104;
-    while (!cabe() && tamanho > 46) {
+    while ((!cabe() || !cabeNaAltura()) && tamanho > 46) {
       tamanho -= 4;
       linhas.forEach((l) => { l.style.fontSize = `${tamanho}px`; });
     }

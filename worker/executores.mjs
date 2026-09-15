@@ -250,6 +250,15 @@ export async function gerarReel(tarefa) {
     if (!caminhos.length) throw new Error('O Reel não produziu arquivo nenhum.');
 
     const pecaId = `${campanhaId}__reel`;
+    // O REEL E A CAPA SÃO PEÇAS INDEPENDENTES.
+    //
+    // Refazer o Reel desenhava a capa de novo e gravava por cima — o consultor
+    // aprovava a capa, mudava a velocidade do vídeo e perdia a capa aprovada. Agora
+    // a capa que já existe fica, com a aprovação dela. A capa que o Reel desenha só
+    // é usada quando ainda não há nenhuma; para mudar a capa existe o Refazer dela.
+    const anterior = await lerPeca(pecaId);
+    const capaNova = caminhos.find((c) => /capa\.jpe?g$/i.test(c)) || null;
+    const capaUrl = anterior?.capaUrl || capaNova;
     await gravarPeca({
       id: pecaId,
       consultorId,
@@ -258,8 +267,9 @@ export async function gerarReel(tarefa) {
       status: 'revisar',
       versao: 1,
       arquivoUrl: caminhos.find((c) => c.endsWith('.mp4')) || escolherPrincipal(caminhos),
-      capaUrl: caminhos.find((c) => /capa\.jpe?g$/i.test(c)) || null,
-      arquivos: caminhos,
+      capaUrl,
+      capaStatus: anterior?.capaUrl ? (anterior.capaStatus || 'revisar') : 'revisar',
+      arquivos: [...new Set([...caminhos, ...(capaUrl ? [capaUrl] : [])])],
       criadoEm: new Date().toISOString(),
     });
 
@@ -289,7 +299,9 @@ export async function gerarCapa(tarefa) {
 
   const temp = pastaTemporaria('capa');
   try {
-    await atualizarCampanha(campanhaId, { status: 'processando' }).catch(() => {});
+    // A capa tem o PRÓPRIO estado de trabalho. Marcar a campanha do Reel como
+    // "processando" travava o Reel inteiro na tela enquanto só a capa era refeita.
+    await atualizarCampanha(campanhaId, { capaStatus: 'processando', capaErro: null }).catch(() => {});
 
     // 1. O retrato, tirado do vídeo.
     const retrato = path.join(temp, 'retrato.png');
@@ -335,13 +347,24 @@ export async function gerarCapa(tarefa) {
       await gravarPeca({
         ...peca,
         capaUrl: nova,
+        // Capa nova volta para revisão; o Reel continua como estava.
+        capaStatus: 'revisar',
         arquivos: [...new Set([...(peca.arquivos || []), nova])],
         atualizadoEm: new Date().toISOString(),
       });
     }
 
-    await atualizarCampanha(campanhaId, { status: 'revisar' }).catch(() => {});
+    await atualizarCampanha(campanhaId, { capaStatus: 'pronta', capaErro: null }).catch(() => {});
     return { capa: nova };
+  } catch (e) {
+    // Na última tentativa a tela precisa saber que falhou, e não ficar girando.
+    if ((tarefa.tentativas || 0) >= 3) {
+      await atualizarCampanha(campanhaId, {
+        capaStatus: 'erro',
+        capaErro: String(e?.message || e).slice(0, 300),
+      }).catch(() => {});
+    }
+    throw e;
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
