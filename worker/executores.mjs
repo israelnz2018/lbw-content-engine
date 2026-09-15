@@ -23,6 +23,7 @@ const RENDERIZADORES = {
   linkedin: path.join(raiz, 'squads/lbw-linkedin-production/automation/render-linkedin.mjs'),
   reel: path.join(raiz, 'squads/lbw-reel-production/automation/render-reel.mjs'),
   legenda: path.join(raiz, 'squads/lbw-reel-production/automation/gerar-legenda-karaoke.mjs'),
+  capa: path.join(raiz, 'squads/lbw-reel-production/automation/render-reel-cover.mjs'),
 };
 
 /**
@@ -243,8 +244,86 @@ export async function gerarReel(tarefa) {
   }
 }
 
+/**
+ * Refaz SÓ a capa do Reel.
+ *
+ * Trocar uma palavra do gancho não pode custar um Reel inteiro: o corte do vídeo
+ * leva perto de um minuto e baixa o trecho de novo. Aqui sai do vídeo apenas UM
+ * QUADRO — por requisição parcial, alguns kilobytes — e o resto é desenho em HTML.
+ *
+ * A capa sobe com um nome novo a cada versão. Sobrescrever `capa.jpg` deixaria o
+ * navegador mostrando a imagem velha do cache, e o consultor concluiria que o botão
+ * não funcionou — que é exatamente o tipo de dúvida que este projeto já teve demais.
+ */
+export async function gerarCapa(tarefa) {
+  const { consultorId, campanhaId } = tarefa;
+  const render = tarefa.render || {};
+  if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
+  if (!render.cover) throw new Error('A tarefa não trouxe o desenho da capa.');
+
+  const temp = pastaTemporaria('capa');
+  try {
+    await atualizarCampanha(campanhaId, { status: 'processando' }).catch(() => {});
+
+    // 1. O retrato, tirado do vídeo.
+    const retrato = path.join(temp, 'retrato.png');
+    const r = render.recorte || {};
+    const cabecalhos = render.sourceHeaders
+      ? `${Object.entries(render.sourceHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n`
+      : null;
+    await execFileAsync('ffmpeg', [
+      '-y', '-hide_banner', '-loglevel', 'error',
+      ...(cabecalhos ? ['-headers', cabecalhos] : []),
+      '-ss', String(render.retratoEm), '-i', render.sourceVideo,
+      '-frames:v', '1',
+      '-vf', `crop=${r.width}:${r.height}:${r.x}:${r.y},scale=900:950:flags=lanczos`,
+      '-update', '1', retrato,
+    ], { timeout: 3 * 60 * 1000 });
+    if (!fs.existsSync(retrato)) throw new Error('Não consegui extrair o retrato do vídeo.');
+
+    // 2. A arte.
+    const saidaDir = path.join(temp, 'saida');
+    fs.mkdirSync(saidaDir, { recursive: true });
+    const versao = Date.now();
+    const arquivoCapa = path.join(saidaDir, `capa-${versao}.jpg`);
+    const configCapa = path.join(temp, 'config-capa.json');
+    fs.writeFileSync(configCapa, JSON.stringify({
+      cover: render.cover,
+      logoPath: path.join(raiz, 'assets/marca/logo-lbw-branca.png'),
+    }, null, 2), 'utf8');
+
+    await execFileAsync('node', [
+      RENDERIZADORES.capa,
+      '--config', configCapa, '--portrait', retrato, '--output', arquivoCapa,
+    ], { maxBuffer: 8 * 1024 * 1024, timeout: 3 * 60 * 1000 });
+    if (!fs.existsSync(arquivoCapa)) throw new Error('A capa não foi gerada.');
+
+    // 3. Sobe e aponta a peça para ela.
+    const caminhos = await enviarPasta(saidaDir, { consultorId, campanhaId, tipo: 'reel' });
+    const nova = caminhos.find((c) => /capa-\d+\.jpe?g$/i.test(c));
+    if (!nova) throw new Error('A capa não subiu.');
+
+    const pecaId = `${campanhaId}__reel`;
+    const peca = await lerPeca(pecaId);
+    if (peca) {
+      await gravarPeca({
+        ...peca,
+        capaUrl: nova,
+        arquivos: [...new Set([...(peca.arquivos || []), nova])],
+        atualizadoEm: new Date().toISOString(),
+      });
+    }
+
+    await atualizarCampanha(campanhaId, { status: 'revisar' }).catch(() => {});
+    return { capa: nova };
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+}
+
 export const EXECUTORES = {
   'gerar-campanha': gerarCampanha,
   'regerar-peca': regerarPeca,
   'gerar-reel': gerarReel,
+  'gerar-capa': gerarCapa,
 };
