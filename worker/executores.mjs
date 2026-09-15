@@ -126,6 +126,28 @@ export async function gerarCampanha(tarefa) {
         };
         await gravarPeca(peca);
         pecas.push(peca);
+
+        // A IMAGEM ÚNICA DO LINKEDIN é a capa do carrossel, mas é uma peça: tem
+        // aprovação própria e lugar na Publicação, como as outras. A cada produção
+        // ela volta para revisão com a capa nova, igual ao carrossel de onde sai.
+        if (tipo === 'FEED') {
+          const capa = caminhos.filter((c) => /slide-\d+\.png$/i.test(c)).sort()[0];
+          if (capa) {
+            const imagemUnica = {
+              id: `${campanhaId}__linkedin-imagem`,
+              consultorId,
+              campanhaId,
+              tipo: 'linkedin-imagem',
+              status: 'revisar',
+              versao: 1,
+              arquivoUrl: capa,
+              arquivos: [capa],
+              criadoEm: new Date().toISOString(),
+            };
+            await gravarPeca(imagemUnica);
+            pecas.push(imagemUnica);
+          }
+        }
       }
     }
 
