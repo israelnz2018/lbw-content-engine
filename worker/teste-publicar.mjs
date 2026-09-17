@@ -163,6 +163,12 @@ conferir('peça no meio da publicação não é enfileirada outra vez',
 conferir('peça que falhou espera o consultor, não tenta sozinha de hora em hora',
   !estaNaHora({ ...agendada, publicacao: { status: 'falhou', erro: 'x' } }, umMinutoDepois));
 
+conferir('peça pausada não vai ao ar, mesmo na hora marcada',
+  !estaNaHora({ ...agendada, pausada: true }, umMinutoDepois));
+
+conferir('retomada (pausada: false) volta a publicar',
+  estaNaHora({ ...agendada, pausada: false }, umMinutoDepois));
+
 conferir('atraso de dois dias NÃO publica (worker voltou do fora do ar)',
   !estaNaHora(agendada, new Date('2026-09-22T22:01:00Z')));
 

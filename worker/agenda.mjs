@@ -79,6 +79,9 @@ export function jaSaiu(peca) {
 export function estaNaHora(peca, agora = new Date(), fuso = FUSO_PADRAO) {
   if (!peca || peca.status !== 'aprovado' || !peca.agendadoEm) return false;
   if (jaSaiu(peca)) return false;
+  // Pausada mantém o dia no calendário e não vai ao ar. É o jeito de dizer
+  // "não agora" sem perder o lugar — tirar do calendário perderia.
+  if (peca.pausada) return false;
   // Falhou antes: quem manda tentar de novo é o consultor, não o relógio —
   // senão a mesma peça quebrada tentaria publicar de hora em hora, para sempre.
   if (peca.publicacao?.status === 'falhou') return false;
