@@ -12,8 +12,8 @@ if (!configPath || !fs.existsSync(configPath)) throw new Error('Informe um arqui
 
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 if (!/^\d{4}-\d{2}-\d{2}$/.test(config.date || '')) throw new Error('A data deve usar YYYY-MM-DD.');
-if (!Array.isArray(config.slides) || config.slides.length < 6 || config.slides.length > 8) {
-  throw new Error('O carrossel deve ter entre 6 e 8 páginas.');
+if (!Array.isArray(config.slides) || config.slides.length < 2 || config.slides.length > 8) {
+  throw new Error('O carrossel deve ter entre 2 e 8 páginas.');
 }
 
 const slug = String(config.slug || 'carrossel').toLowerCase().normalize('NFD')
