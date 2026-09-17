@@ -153,6 +153,11 @@ export async function lerCampanha(campanhaId) {
   return snap.exists ? { id: snap.id, ...snap.data() } : null;
 }
 
+export async function lerCriativo(criativoId) {
+  const snap = await db().collection(COLECOES.criativos).doc(criativoId).get();
+  return snap.exists ? { id: snap.id, ...snap.data() } : null;
+}
+
 export async function lerPeca(pecaId) {
   const snap = await db().collection(COLECOES.pecas).doc(pecaId).get();
   return snap.exists ? { id: snap.id, ...snap.data() } : null;

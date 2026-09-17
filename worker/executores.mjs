@@ -17,6 +17,8 @@ import { gravarPeca, atualizarCampanha, lerCampanha, lerPeca } from './firestore
 import {
   resolverImagensDoRender, imagensPorPagina, registrarUso, prepararImagem as prepararImagemDaBiblioteca,
 } from './imagens.mjs';
+import { publicarPeca, redeDaPeca } from './publicar.mjs';
+import { jaSaiu } from './agenda.mjs';
 
 const execFileAsync = promisify(execFile);
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -99,6 +101,7 @@ export async function gerarCampanha(tarefa) {
     // de o consultor saber dar refresh forçado.
     const versaoDaProducao = Date.now();
     const pecas = [];
+    let paginasFeed = [];
     for (const tipo of ['FEED', 'REELS', 'LINKEDIN']) {
       const pasta = path.join(temp, tipo);
       if (!fs.existsSync(pasta)) continue;
@@ -110,6 +113,21 @@ export async function gerarCampanha(tarefa) {
         });
         if (!caminhos.length) continue;
 
+        if (tipo === 'FEED') {
+          paginasFeed = caminhos
+            .filter((c) => /slide-\d+\.png$/i.test(c))
+            .sort((a, b) => a.localeCompare(b));
+        }
+
+        // O LinkedIn publica o PDF, mas a tela precisa dos PNGs para mostrar e
+        // editar cada página. Na produção inicial eles são os mesmos do feed.
+        const arquivosDaPeca = tipo === 'LINKEDIN'
+          ? [...caminhos, ...paginasFeed]
+          : caminhos;
+        const arquivoPrincipal = tipo === 'LINKEDIN'
+          ? caminhos.find((c) => /\.pdf$/i.test(c)) || escolherPrincipal(caminhos)
+          : escolherPrincipal(caminhos);
+
         const pecaId = `${campanhaId}__${tipo.toLowerCase()}`;
         const peca = {
           id: pecaId,
@@ -120,8 +138,12 @@ export async function gerarCampanha(tarefa) {
           versao: 1,
           // A capa da previa tem que ser a peca, nunca a legenda: em ordem alfabetica
           // "legenda.md" vem antes de "slide-01.png" e virava a miniatura.
-          arquivoUrl: escolherPrincipal(caminhos),
-          arquivos: caminhos,
+          arquivoUrl: arquivoPrincipal,
+          arquivos: arquivosDaPeca,
+          // Guardamos o roteiro original, com os ids da biblioteca. `render`
+          // contém URLs temporárias usadas apenas durante esta execução.
+          roteiro: tarefa.render?.slides || [],
+          imagensPorPagina: porPagina,
           criadoEm: new Date().toISOString(),
         };
         await gravarPeca(peca);
@@ -178,7 +200,7 @@ export async function regerarPeca(tarefa) {
   try {
     await gravarPeca({ ...peca, status: 'gerando' });
 
-    const { render } = await resolverImagensDoRender(tarefa.render || {}, consultorId);
+    const { render, usos } = await resolverImagensDoRender(tarefa.render || {}, consultorId);
     const renderConfig = { ...render, outputRoot: temp };
 
     const configPath = path.join(temp, 'config.json');
@@ -187,26 +209,50 @@ export async function regerarPeca(tarefa) {
     const script = peca.tipo === 'linkedin-pdf' && renderConfig.layout
       ? RENDERIZADORES.linkedin
       : RENDERIZADORES.carrossel;
-    await rodarRenderizador(script, configPath);
+    const resultado = await rodarRenderizador(script, configPath);
+    const porPagina = imagensPorPagina(resultado?.pessoas, usos);
+    await registrarUso(porPagina).catch((e) => console.warn(`aviso: uso das imagens não registrado (${e.message})`));
 
     const novaVersao = (peca.versao || 1) + 1;
-    const caminhos = [];
-    for (const tipo of ['FEED', 'REELS', 'LINKEDIN']) {
+    async function subirTipo(tipo) {
+      const caminhos = [];
       const pasta = path.join(temp, tipo);
-      if (!fs.existsSync(pasta)) continue;
+      if (!fs.existsSync(pasta)) return caminhos;
       for (const sub of fs.readdirSync(pasta)) {
         caminhos.push(...await enviarPasta(path.join(pasta, sub), {
           consultorId, campanhaId, tipo: `${tipo.toLowerCase()}-v${novaVersao}`,
         }));
       }
+      return caminhos;
     }
+
+    let caminhos = [];
+    let arquivoPrincipal = null;
+    if (peca.tipo === 'carrossel-feed') {
+      caminhos = await subirTipo('FEED');
+      arquivoPrincipal = escolherPrincipal(caminhos);
+    } else if (peca.tipo === 'linkedin-pdf') {
+      const documentos = await subirTipo('LINKEDIN');
+      const paginas = await subirTipo('FEED');
+      caminhos = [...documentos, ...paginas];
+      arquivoPrincipal = documentos.find((c) => /\.pdf$/i.test(c)) || escolherPrincipal(documentos);
+    } else if (peca.tipo === 'carrossel-video') {
+      caminhos = await subirTipo('REELS');
+      arquivoPrincipal = caminhos.find((c) => /\.mp4$/i.test(c)) || escolherPrincipal(caminhos);
+    } else {
+      throw new Error(`A peça ${peca.tipo} não pode ser refeita pelo renderizador de carrossel.`);
+    }
+
+    if (!caminhos.length) throw new Error(`O renderizador não entregou arquivos para ${peca.tipo}.`);
 
     await gravarPeca({
       ...peca,
       status: 'revisar',
       versao: novaVersao,
-      arquivoUrl: escolherPrincipal(caminhos) || peca.arquivoUrl,
-      arquivos: caminhos.length ? caminhos : peca.arquivos,
+      arquivoUrl: arquivoPrincipal || peca.arquivoUrl,
+      arquivos: caminhos,
+      roteiro: tarefa.render?.slides || peca.roteiro || [],
+      imagensPorPagina: porPagina,
       pedidoMelhoria: instrucao || peca.pedidoMelhoria,
     });
 
@@ -430,10 +476,70 @@ export async function prepararImagem(tarefa) {
   }
 }
 
+/**
+ * Publica a peça na rede dela.
+ *
+ * Duas decisões que valem explicação:
+ *
+ * 1. NÃO propaga o erro. Todas as outras tarefas relançam, e a fila tenta três
+ *    vezes. Aqui isso é perigoso: se a falha aconteceu DEPOIS do post entrar no
+ *    ar (ao buscar o link, por exemplo), a segunda tentativa publicaria de novo.
+ *    Então a falha é registrada na peça e a tarefa termina. Quem manda tentar de
+ *    novo é o consultor, olhando o motivo.
+ *
+ * 2. Marca `publicando` antes de começar. É o que impede o relógio de enfileirar
+ *    a mesma peça outra vez enquanto o Instagram ainda processa o vídeo — o que
+ *    pode levar minutos.
+ */
+export async function publicar(tarefa) {
+  const peca = await lerPeca(tarefa.pecaId);
+  if (!peca) throw new Error(`Peça ${tarefa.pecaId} não existe.`);
+
+  if (jaSaiu(peca)) {
+    return { pecaId: peca.id, ignorada: 'já publicada' };
+  }
+
+  await gravarPeca({
+    id: peca.id,
+    publicacao: { ...(peca.publicacao || {}), status: 'publicando', erro: null, tentadoEm: new Date().toISOString() },
+  });
+
+  try {
+    const { rede, postId, link } = await publicarPeca(peca);
+    await gravarPeca({
+      id: peca.id,
+      status: 'publicado',
+      publicacao: {
+        rede,
+        status: 'publicada',
+        postId,
+        link: link || null,
+        publicadoEm: new Date().toISOString(),
+        erro: null,
+      },
+    });
+    return { pecaId: peca.id, rede, postId, link };
+  } catch (e) {
+    const motivo = String(e?.message || e).slice(0, 500);
+    await gravarPeca({
+      id: peca.id,
+      publicacao: {
+        ...(peca.publicacao || {}),
+        rede: redeDaPeca(peca.tipo),
+        status: 'falhou',
+        erro: motivo,
+        falhouEm: new Date().toISOString(),
+      },
+    });
+    return { pecaId: peca.id, falhou: motivo };
+  }
+}
+
 export const EXECUTORES = {
   'gerar-campanha': gerarCampanha,
   'regerar-peca': regerarPeca,
   'gerar-reel': gerarReel,
   'gerar-capa': gerarCapa,
   'preparar-imagem': prepararImagem,
+  'publicar': publicar,
 };

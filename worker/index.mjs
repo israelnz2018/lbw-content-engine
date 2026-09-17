@@ -10,10 +10,15 @@
  */
 import { pegarProximaTarefa, concluirTarefa, falharTarefa, ouvirFila } from './firestore.mjs';
 import { EXECUTORES } from './executores.mjs';
+import { conferirAgenda } from './agenda.mjs';
 
 // Rede de segurança, não o mecanismo principal: quem acorda o worker é o ouvinte
 // da fila. Isto aqui só cobre o caso de a conexão do ouvinte cair sem avisar.
 const INTERVALO_MS = Number(process.env.INTERVALO_FILA_MS || 60000);
+
+// O relógio da agenda. Cinco minutos de precisão bastam para uma publicação, e
+// olhar de minuto em minuto seria leitura no Firestore sem ninguém pedindo nada.
+const INTERVALO_AGENDA_MS = Number(process.env.INTERVALO_AGENDA_MS || 5 * 60000);
 const UMA_VEZ = process.argv.includes('--uma-vez');
 
 let encerrando = false;
@@ -78,6 +83,23 @@ async function drenarFila() {
   }
 }
 
+/**
+ * Olha o calendário e põe na fila o que venceu.
+ *
+ * Não publica aqui: só enfileira. Publicar é tarefa como qualquer outra, com
+ * registro de início, erro e conclusão — e uma por vez, para não sair em rajada.
+ */
+async function baterONoRelogio() {
+  if (encerrando) return;
+  try {
+    const enfileiradas = await conferirAgenda();
+    if (enfileiradas.length) log('info', 'peças agendadas entraram na fila', { quantas: enfileiradas.length, enfileiradas });
+  } catch (e) {
+    // A agenda falhar não pode derrubar o worker: a fila continua atendendo.
+    log('erro', 'falha ao conferir a agenda', { erro: String(e?.message || e).slice(0, 300) });
+  }
+}
+
 async function laco() {
   if (UMA_VEZ) {
     const teve = await processarUma().catch((e) => {
@@ -101,15 +123,18 @@ async function laco() {
 
   // Uma passada na subida: pega o que entrou enquanto o worker estava fora do ar.
   void drenarFila();
+  void baterONoRelogio();
 
   // Batida de segurança. Se o ouvinte cair sem avisar, o worker não fica mudo.
   const batida = setInterval(() => { void drenarFila(); }, INTERVALO_MS);
+  const relogio = setInterval(() => { void baterONoRelogio(); }, INTERVALO_AGENDA_MS);
 
   await new Promise((resolve) => {
     const conferir = setInterval(() => {
       if (!encerrando) return;
       clearInterval(conferir);
       clearInterval(batida);
+      clearInterval(relogio);
       parar();
       resolve();
     }, 500);
