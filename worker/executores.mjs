@@ -208,7 +208,9 @@ export async function gerarCampanha(tarefa) {
     // O texto do LinkedIn nasce da mesma copy aprovada e entra na mesma produção.
     // Assim ele não depende de uma ação posterior em "Minhas peças".
     const criativo = tarefa.criativoId ? await lerCriativo(tarefa.criativoId) : null;
-    const textoLinkedin = String(criativo?.textos?.textoLinkedin || '').trim();
+    // O texto do LinkedIn e uma das seis saidas obrigatorias. Campanhas antigas
+    // sem o campo da IA ainda recebem a peca usando o titulo aprovado.
+    const textoLinkedin = String(criativo?.textos?.textoLinkedin || campanha.titulo || '').trim();
     if (textoLinkedin) {
       const textoRenderizado = await renderizarTextoLinkedin({
         campanha,
@@ -237,8 +239,16 @@ export async function gerarCampanha(tarefa) {
     // Quem da biblioteca apareceu em cada página vai para a campanha — só quando
     // alguma imagem da biblioteca foi usada. Carrossel sem escolha grava o mesmo de
     // sempre.
+    const esperados = ['carrossel-feed', 'linkedin-imagem', 'carrossel-video', 'linkedin-pdf', 'linkedin-texto'];
+    const ausentes = esperados.filter((tipo) => !pecas.some((peca) => peca.tipo === tipo));
+    if (ausentes.length) {
+      throw new Error(`A campanha terminou sem as pecas obrigatorias: ${ausentes.join(', ')}.`);
+    }
+
     await atualizarCampanha(campanhaId, {
       status: 'revisar',
+      pecasGeradas: pecas.length,
+      pecasEsperadas: 5,
       ...(porPagina.some(Boolean) ? { imagensPorPagina: porPagina } : {}),
     });
     return { pecas: pecas.length, resultado };
