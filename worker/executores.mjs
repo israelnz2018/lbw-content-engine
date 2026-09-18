@@ -57,9 +57,10 @@ async function renderizarTextoLinkedin({ campanha, criativoId, texto, temp, tipo
     date,
     slug,
     formato: 'quadrado',
-    layout: 'citacao',
+    layout: 'texto',
     frase,
     quoteScale,
+    fonte: 'Cortes do curso White Belt',
     post: frase,
     outputRoot: temp,
   }, null, 2), 'utf8');

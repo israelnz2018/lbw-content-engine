@@ -54,6 +54,7 @@ const rich = v => esc(v).replace(/\*(.+?)\*/g, '<span class="hl">$1</span>');
 const plain = v => String(v ?? '').replace(/\*/g, '');
 
 const modoCitacao = String(config.layout || '').toLowerCase() === 'citacao';
+const modoTexto = String(config.layout || '').toLowerCase() === 'texto';
 const img = modoCitacao ? '' : pessoaUrl(config.pessoa);
 const numero = config.numero ? `<div class="numero">${esc(config.numero)}</div>` : '';
 const fonte = config.fonte ? `<div class="fonte">Fonte: ${esc(config.fonte)}</div>` : '';
@@ -88,10 +89,18 @@ body{font-family:Arial,Helvetica,sans-serif;background:#FFFFFF}
 .frase{font-size:${Math.round(H * 0.093 * (Number(config.quoteScale) || 1))}px;line-height:1.16;color:#0A2A5E;font-weight:900;letter-spacing:-1.5px;margin:0}
 .credito{margin-top:${Math.round(H * 0.055)}px;font-size:${Math.round(H * 0.03)}px;color:#6D89AB;font-weight:700;line-height:1.4}
 .credito strong{color:#0A2A5E;font-weight:900}
+.texto-literal{flex:1;display:flex;flex-direction:column;justify-content:center;padding:${Math.round(H * 0.10)}px ${Math.round(W * 0.10)}px;background:#FFFFFF}
+.texto-literal .conteudo{font-size:${Math.round(52 * (Number(config.quoteScale) || 1))}px;line-height:1.28;color:#111111;font-weight:400;white-space:pre-wrap;margin:0}
+.texto-literal .fonte{margin-top:${Math.round(H * 0.06)}px;font-size:28px;line-height:1.35;color:#555555;font-weight:400}
+.texto-literal-mode .brand,.texto-literal-mode .foot{display:none}
 </style></head><body>
-<main class="page">
+<main class="page ${modoTexto ? 'texto-literal-mode' : ''}">
   <header class="brand"><img src="${logo}"><span>EDUCAÇÃO PELO TRABALHO</span></header>
-  ${modoCitacao ? `
+  ${modoTexto ? `
+  <section class="texto-literal">
+    <p class="conteudo">${esc(config.frase || config.title)}</p>
+    ${config.fonte ? `<div class="fonte">Fonte: ${esc(config.fonte)}</div>` : ''}
+  </section>` : modoCitacao ? `
   <section class="main citacao">
     <div class="aspas">&ldquo;</div>
     <p class="frase">${rich(config.frase || config.title)}</p>

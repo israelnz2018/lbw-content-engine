@@ -8,7 +8,7 @@
  *   node index.mjs            laço contínuo (é assim que roda no Railway)
  *   node index.mjs --uma-vez  processa uma tarefa e sai (bom para testar)
  */
-import { pegarProximaTarefa, concluirTarefa, falharTarefa, ouvirFila } from './firestore.mjs';
+import { pegarProximaTarefa, concluirTarefa, falharTarefa, atualizarCampanha, ouvirFila } from './firestore.mjs';
 import { EXECUTORES } from './executores.mjs';
 import { conferirAgenda } from './agenda.mjs';
 
@@ -52,6 +52,12 @@ async function processarUma() {
     });
   } catch (e) {
     const desistiu = await falharTarefa(tarefa.id, e?.message || e, tarefa.tentativas);
+    if (desistiu && tarefa.campanhaId) {
+      await atualizarCampanha(tarefa.campanhaId, {
+        status: 'erro',
+        erro: String(e?.message || e).slice(0, 500),
+      }).catch(() => {});
+    }
     log('erro', desistiu ? 'tarefa falhou em definitivo' : 'tarefa falhou, vai tentar de novo', {
       id: tarefa.id,
       tentativas: tarefa.tentativas,
