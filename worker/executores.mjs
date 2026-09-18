@@ -13,7 +13,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { enviarPasta } from './storage.mjs';
-import { gravarPeca, atualizarCampanha, lerCampanha, lerPeca } from './firestore.mjs';
+import { gravarPeca, atualizarCampanha, lerCampanha, lerCriativo, lerPeca } from './firestore.mjs';
 import {
   resolverImagensDoRender, imagensPorPagina, registrarUso, prepararImagem as prepararImagemDaBiblioteca,
 } from './imagens.mjs';
@@ -44,6 +44,38 @@ function escolherPrincipal(caminhos = []) {
 /** Pasta temporária desta execução. Sempre apagada no fim, dê certo ou não. */
 function pastaTemporaria(prefixo) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `lbw-${prefixo}-`));
+}
+
+async function renderizarTextoLinkedin({ campanha, criativoId, texto, temp, tipoStorage, versao = 1 }) {
+  const frase = String(texto || '').trim();
+  if (!frase) return null;
+  const configPath = path.join(temp, `config-texto-linkedin-${versao}.json`);
+  const slug = `${campanha.id || campanha.titulo || criativoId}-texto-linkedin`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '').slice(0, 70);
+  const date = new Date().toISOString().slice(0, 10);
+  const quoteScale = Math.min(1, Math.max(0.58, 62 / Math.max(1, frase.split(/\s+/).length)));
+  fs.writeFileSync(configPath, JSON.stringify({
+    date,
+    slug,
+    formato: 'quadrado',
+    layout: 'citacao',
+    frase,
+    quoteScale,
+    post: frase,
+    outputRoot: temp,
+  }, null, 2), 'utf8');
+  await rodarRenderizador(RENDERIZADORES.linkedin, configPath);
+  const raizSaida = path.join(temp, 'LINKEDIN');
+  const pastaTexto = path.join(raizSaida, `${date}__${slug}`);
+  const pastas = fs.existsSync(pastaTexto) ? [pastaTexto] : [];
+  if (!pastas.length) throw new Error('O renderizador do Texto do LinkedIn nÃ£o entregou a imagem.');
+  const caminhos = await enviarPasta(pastaTexto, {
+    consultorId: campanha.consultorId,
+    campanhaId: campanha.id,
+    tipo: tipoStorage,
+  });
+  const imagem = caminhos.find((c) => /\.png$/i.test(c)) || caminhos.find((c) => /\.(jpe?g)$/i.test(c));
+  if (!imagem) throw new Error('O Texto do LinkedIn nÃ£o produziu uma imagem.');
+  return { caminhos, imagem, frase };
 }
 
 async function rodarRenderizador(script, configPath) {
@@ -173,6 +205,35 @@ export async function gerarCampanha(tarefa) {
       }
     }
 
+    // O texto do LinkedIn nasce da mesma copy aprovada e entra na mesma produção.
+    // Assim ele não depende de uma ação posterior em "Minhas peças".
+    const criativo = tarefa.criativoId ? await lerCriativo(tarefa.criativoId) : null;
+    const textoLinkedin = String(criativo?.textos?.textoLinkedin || '').trim();
+    if (textoLinkedin) {
+      const textoRenderizado = await renderizarTextoLinkedin({
+        campanha,
+        criativoId: tarefa.criativoId,
+        texto: textoLinkedin,
+        temp,
+        tipoStorage: `linkedin-texto/v${versaoDaProducao}`,
+      });
+      const textoPeca = {
+        id: `${campanhaId}__linkedin-texto`,
+        consultorId,
+        campanhaId,
+        tipo: 'linkedin-texto',
+        status: 'revisar',
+        versao: 1,
+        arquivoUrl: textoRenderizado.imagem,
+        arquivos: textoRenderizado.caminhos,
+        texto: textoRenderizado.frase,
+        legenda: textoRenderizado.frase,
+        criadoEm: new Date().toISOString(),
+      };
+      await gravarPeca(textoPeca);
+      pecas.push(textoPeca);
+    }
+
     // Quem da biblioteca apareceu em cada página vai para a campanha — só quando
     // alguma imagem da biblioteca foi usada. Carrossel sem escolha grava o mesmo de
     // sempre.
@@ -192,6 +253,7 @@ export async function gerarCampanha(tarefa) {
  */
 export async function regerarPeca(tarefa) {
   const { consultorId, campanhaId, pecaId, instrucao } = tarefa;
+  const campanha = await lerCampanha(campanhaId);
   const peca = await lerPeca(pecaId);
   if (!peca) throw new Error(`Peça ${pecaId} não existe.`);
 
@@ -200,17 +262,23 @@ export async function regerarPeca(tarefa) {
   try {
     await gravarPeca({ ...peca, status: 'gerando' });
 
-    const { render, usos } = await resolverImagensDoRender(tarefa.render || {}, consultorId);
+    const ehTextoLinkedin = peca.tipo === 'linkedin-texto';
+    const { render, usos } = ehTextoLinkedin
+      ? { render: tarefa.render || {}, usos: [] }
+      : await resolverImagensDoRender(tarefa.render || {}, consultorId);
     const renderConfig = { ...render, outputRoot: temp };
 
-    const configPath = path.join(temp, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
-
-    const script = peca.tipo === 'linkedin-pdf' && renderConfig.layout
-      ? RENDERIZADORES.linkedin
-      : RENDERIZADORES.carrossel;
-    const resultado = await rodarRenderizador(script, configPath);
-    const porPagina = imagensPorPagina(resultado?.pessoas, usos);
+    let resultado = null;
+    let porPagina = [];
+    if (!ehTextoLinkedin) {
+      const configPath = path.join(temp, 'config.json');
+      fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
+      const script = peca.tipo === 'linkedin-pdf' && renderConfig.layout
+        ? RENDERIZADORES.linkedin
+        : RENDERIZADORES.carrossel;
+      resultado = await rodarRenderizador(script, configPath);
+      porPagina = imagensPorPagina(resultado?.pessoas, usos);
+    }
     await registrarUso(porPagina).catch((e) => console.warn(`aviso: uso das imagens não registrado (${e.message})`));
 
     const novaVersao = (peca.versao || 1) + 1;
@@ -228,7 +296,25 @@ export async function regerarPeca(tarefa) {
 
     let caminhos = [];
     let arquivoPrincipal = null;
-    if (peca.tipo === 'carrossel-feed') {
+    if (peca.tipo === 'linkedin-texto') {
+      const criativo = tarefa.criativoId
+        ? await lerCriativo(tarefa.criativoId)
+        : await lerCriativo(campanha?.criativoId);
+      const texto = String(tarefa.render?.frase || criativo?.textos?.textoLinkedin || peca.texto || '').trim();
+      const renderizado = await renderizarTextoLinkedin({
+        campanha: { ...(campanha || {}), id: campanhaId, consultorId },
+        criativoId: tarefa.criativoId,
+        texto,
+        temp,
+        tipoStorage: `linkedin-texto-v${novaVersao}`,
+        versao: novaVersao,
+      });
+      if (!renderizado) throw new Error('O Texto do LinkedIn está sem conteúdo para renderizar.');
+      caminhos = renderizado.caminhos;
+      arquivoPrincipal = renderizado.imagem;
+      peca.texto = renderizado.frase;
+      peca.legenda = renderizado.frase;
+    } else if (peca.tipo === 'carrossel-feed') {
       caminhos = await subirTipo('FEED');
       arquivoPrincipal = escolherPrincipal(caminhos);
     } else if (peca.tipo === 'linkedin-pdf') {

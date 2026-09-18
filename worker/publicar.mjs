@@ -36,6 +36,7 @@ export const REDE_DA_PECA = {
   'carrossel-video': 'instagram',
   'linkedin-pdf': 'linkedin',
   'linkedin-imagem': 'linkedin',
+  'linkedin-texto': 'linkedin',
 };
 
 export function redeDaPeca(tipo) {
@@ -213,6 +214,9 @@ export async function legendaDaPeca(peca) {
   const rede = redeDaPeca(peca?.tipo);
   const campanha = peca?.campanhaId ? await lerCampanha(peca.campanhaId) : null;
   const criativo = campanha?.criativoId ? await lerCriativo(campanha.criativoId) : null;
+  if (peca?.tipo === 'linkedin-texto' && criativo?.textos?.textoLinkedin?.trim()) {
+    return criativo.textos.textoLinkedin.trim();
+  }
   return escolherTexto(rede, criativo?.textos || {});
 }
 

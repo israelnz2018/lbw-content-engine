@@ -18,7 +18,10 @@ const slug = String(config.slug || 'post').toLowerCase().normalize('NFD')
   .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 const base = `${config.date}__${slug}`;
-const outDir = path.resolve(projectRoot, 'ENTREGAS', 'LINKEDIN', base);
+const entregas = config.outputRoot
+  ? path.resolve(config.outputRoot)
+  : path.resolve(projectRoot, 'ENTREGAS');
+const outDir = path.resolve(entregas, 'LINKEDIN', base);
 fs.mkdirSync(outDir, { recursive: true });
 
 // LinkedIn: 1200x627 é o padrão de post com imagem; 1080x1080 para feed quadrado.
