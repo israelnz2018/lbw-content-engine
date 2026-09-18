@@ -125,7 +125,10 @@ export function ouvirFila(aoMudar) {
 }
 
 export async function concluirTarefa(tarefaId) {
-  await db().collection(COLECOES.tarefas).doc(tarefaId).update({
+  const ref = db().collection(COLECOES.tarefas).doc(tarefaId);
+  const atual = await ref.get();
+  if (atual.exists && atual.data()?.status === 'cancelada') return;
+  await ref.update({
     status: 'concluida',
     concluidoEm: new Date().toISOString(),
     erro: null,
@@ -134,8 +137,11 @@ export async function concluirTarefa(tarefaId) {
 
 /** Falhou. Depois de 3 tentativas desiste, para não ficar em laço infinito. */
 export async function falharTarefa(tarefaId, erro, tentativas) {
+  const ref = db().collection(COLECOES.tarefas).doc(tarefaId);
+  const atual = await ref.get();
+  if (atual.exists && atual.data()?.status === 'cancelada') return true;
   const desistir = (tentativas || 0) >= 3;
-  await db().collection(COLECOES.tarefas).doc(tarefaId).update({
+  await ref.update({
     status: desistir ? 'erro' : 'pendente',
     erro: String(erro).slice(0, 500),
     concluidoEm: desistir ? new Date().toISOString() : null,
