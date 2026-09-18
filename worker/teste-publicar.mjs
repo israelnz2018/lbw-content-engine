@@ -9,7 +9,7 @@
  */
 import {
   redeDaPeca, consultorLiberado, limitarLegenda, slidesDoCarrossel,
-  capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto,
+  capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto, deveCruzarParaFacebook,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -30,6 +30,14 @@ conferir('reel e carrossel vão para o Instagram',
 conferir('PDF e imagem única vão para o LinkedIn',
   redeDaPeca('linkedin-pdf') === 'linkedin' && redeDaPeca('linkedin-imagem') === 'linkedin');
 conferir('tipo desconhecido não escolhe rede nenhuma', redeDaPeca('tiktok') === null);
+
+/* ── O bônus do Facebook ─────────────────────────────────────── */
+// O Facebook não tem aprovação nem agendamento próprios: cruza sozinho com
+// tudo que já vai para o Instagram, e só isso.
+conferir('Reel e os dois carrosséis do Instagram cruzam para o Facebook',
+  deveCruzarParaFacebook('reel') && deveCruzarParaFacebook('carrossel-feed') && deveCruzarParaFacebook('carrossel-video'));
+conferir('peça de LinkedIn não cruza — não há Instagram para acompanhar',
+  !deveCruzarParaFacebook('linkedin-pdf') && !deveCruzarParaFacebook('linkedin-imagem'));
 
 /* ── Trava da fase 1 ─────────────────────────────────────────── */
 conferir('israel publica', consultorLiberado('israel'));

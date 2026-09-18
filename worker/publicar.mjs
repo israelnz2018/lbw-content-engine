@@ -43,6 +43,18 @@ export function redeDaPeca(tipo) {
 }
 
 /**
+ * O Facebook não é uma rede própria aqui: é um BÔNUS do Instagram.
+ *
+ * Decisão do Israel — o post da Página do Facebook sai automaticamente junto
+ * com o Instagram, mesmo arquivo e legenda, sem aprovação nem agendamento à
+ * parte. Por isso só cruza quem já vai para o Instagram; peça de LinkedIn não
+ * tem o que cruzar.
+ */
+export function deveCruzarParaFacebook(tipo) {
+  return redeDaPeca(tipo) === 'instagram';
+}
+
+/**
  * Quem pode publicar automaticamente.
  *
  * Trava de fase 1: o token é de uma conta só. Sem esta trava, a peça de um
@@ -330,6 +342,95 @@ export async function publicarNoInstagram(peca, legenda) {
   return { rede: 'instagram', postId, link };
 }
 
+/* ===================== Facebook (bônus do Instagram) ===================== */
+
+/**
+ * Credenciais da Página. Ao contrário do Instagram e do LinkedIn, a ausência
+ * delas NÃO é erro — o cruzamento é opcional, e a peça vai para o Instagram
+ * normalmente sem ele.
+ */
+function credenciaisFacebook() {
+  const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+  const paginaId = process.env.FACEBOOK_PAGE_ID;
+  return token && paginaId ? { token, paginaId } : null;
+}
+
+async function permalinkFacebook(id, token) {
+  try {
+    const res = await fetch(`${IG_BASE}/${id}?${new URLSearchParams({ fields: 'permalink_url', access_token: token })}`);
+    if (!res.ok) return null;
+    return (await res.json()).permalink_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * O carrossel do feed vira um álbum de várias fotos num post só.
+ *
+ * O Graph API pede duas chamadas: cada foto sobe "despublicada" (não aparece
+ * sozinha no mural) e devolve um id; o post do feed referencia todos esses ids
+ * em `attached_media`. É o mesmo padrão de post multi-foto que qualquer
+ * usuário cria pelo app do Facebook.
+ */
+async function publicarFotosFacebook(peca, legenda, { token, paginaId }) {
+  const slides = slidesDoCarrossel(peca);
+  const enderecos = await Promise.all(slides.map(enderecoPublico));
+
+  const anexos = [];
+  for (const url of enderecos) {
+    const { id } = await postarGraph(`${paginaId}/photos`, { url, published: 'false', access_token: token });
+    anexos.push({ media_fbid: id });
+  }
+
+  return postarGraph(`${paginaId}/feed`, {
+    message: legenda,
+    attached_media: JSON.stringify(anexos),
+    access_token: token,
+  });
+}
+
+/** Reel e carrossel em vídeo viram vídeo comum na Página. */
+async function publicarVideoFacebook(peca, legenda, { token, paginaId }) {
+  const video = await enderecoPublico(videoDaPeca(peca));
+  return postarGraph(`${paginaId}/videos`, {
+    file_url: video, description: legenda, access_token: token,
+  });
+}
+
+/**
+ * O cruzamento em si. Só é chamada depois que o Instagram já publicou — nunca
+ * antes, e o resultado nunca desfaz o Instagram se der errado.
+ */
+async function publicarNoFacebook(peca, legenda, credenciais) {
+  const { id } = peca.tipo === 'carrossel-feed'
+    ? await publicarFotosFacebook(peca, legenda, credenciais)
+    : await publicarVideoFacebook(peca, legenda, credenciais);
+  const link = await permalinkFacebook(id, credenciais.token);
+  return { postId: id, link };
+}
+
+/**
+ * Tenta o cruzamento sem nunca lançar erro para quem chamou.
+ *
+ * Devolve null quando as credenciais não estão configuradas (silêncio: é
+ * recurso opcional, não falta de alguma coisa). Devolve {status:'falhou'}
+ * quando tentou e não conseguiu — o Instagram já foi ao ar, e isto é só um
+ * registro para o consultor ver e, se quiser, postar à mão.
+ */
+export async function cruzarParaFacebookSeConfigurado(peca, legenda) {
+  if (!deveCruzarParaFacebook(peca.tipo)) return null;
+  const credenciais = credenciaisFacebook();
+  if (!credenciais) return null;
+
+  try {
+    const { postId, link } = await publicarNoFacebook(peca, legenda, credenciais);
+    return { status: 'publicada', postId, link, publicadoEm: new Date().toISOString(), erro: null };
+  } catch (e) {
+    return { status: 'falhou', erro: String(e?.message || e).slice(0, 500) };
+  }
+}
+
 /* ===================== LinkedIn ===================== */
 
 function credenciaisLinkedin() {
@@ -425,7 +526,15 @@ export async function publicarNoLinkedin(peca, legenda) {
 export async function publicarPeca(pecaOuId) {
   const peca = typeof pecaOuId === 'string' ? await lerPeca(pecaOuId) : pecaOuId;
   const { rede, legenda } = conferirPeca(peca, await legendaDaPeca(peca));
-  return rede === 'instagram'
-    ? publicarNoInstagram(peca, legenda)
-    : publicarNoLinkedin(peca, legenda);
+
+  const resultado = rede === 'instagram'
+    ? await publicarNoInstagram(peca, legenda)
+    : await publicarNoLinkedin(peca, legenda);
+
+  // O Facebook só é tentado DEPOIS do Instagram estar no ar, e nunca pode
+  // desfazê-lo: se falhar aqui, o resultado principal já aconteceu.
+  const facebook = await cruzarParaFacebookSeConfigurado(peca, legenda);
+  if (facebook) resultado.facebook = facebook;
+
+  return resultado;
 }

@@ -505,7 +505,7 @@ export async function publicar(tarefa) {
   });
 
   try {
-    const { rede, postId, link } = await publicarPeca(peca);
+    const { rede, postId, link, facebook } = await publicarPeca(peca);
     await gravarPeca({
       id: peca.id,
       status: 'publicado',
@@ -516,9 +516,12 @@ export async function publicar(tarefa) {
         link: link || null,
         publicadoEm: new Date().toISOString(),
         erro: null,
+        // Só grava a chave quando houve tentativa — undefined derrubaria a
+        // gravação inteira, e a maioria das peças (LinkedIn) nem cruza.
+        ...(facebook ? { facebook } : {}),
       },
     });
-    return { pecaId: peca.id, rede, postId, link };
+    return { pecaId: peca.id, rede, postId, link, facebook: facebook?.status };
   } catch (e) {
     const motivo = String(e?.message || e).slice(0, 500);
     await gravarPeca({
