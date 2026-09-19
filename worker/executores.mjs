@@ -367,7 +367,9 @@ export async function regerarPeca(tarefa) {
       arquivos: caminhos,
       roteiro: tarefa.render?.slides || peca.roteiro || [],
       imagensPorPagina: porPagina,
-      pedidoMelhoria: instrucao || peca.pedidoMelhoria,
+      ...(instrucao || peca.pedidoMelhoria
+        ? { pedidoMelhoria: instrucao || peca.pedidoMelhoria }
+        : {}),
     });
 
     return { versao: novaVersao, arquivos: caminhos.length };
