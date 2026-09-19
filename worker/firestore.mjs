@@ -136,6 +136,12 @@ export async function concluirTarefa(tarefaId) {
   });
 }
 
+export async function tarefaCancelada(tarefaId) {
+  if (!tarefaId) return false;
+  const snap = await db().collection(COLECOES.tarefas).doc(tarefaId).get();
+  return snap.exists && snap.data()?.status === 'cancelada';
+}
+
 /** Falhou. Depois de 3 tentativas desiste, para não ficar em laço infinito. */
 export async function falharTarefa(tarefaId, erro, tentativas) {
   const ref = db().collection(COLECOES.tarefas).doc(tarefaId);

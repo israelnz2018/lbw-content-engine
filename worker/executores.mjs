@@ -13,7 +13,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { enviarPasta } from './storage.mjs';
-import { gravarPeca, atualizarCampanha, lerCampanha, lerCriativo, lerPeca } from './firestore.mjs';
+import {
+  gravarPeca, atualizarCampanha, lerCampanha, lerCriativo, lerPeca, tarefaCancelada,
+} from './firestore.mjs';
 import {
   resolverImagensDoRender, imagensPorPagina, registrarUso, prepararImagem as prepararImagemDaBiblioteca,
 } from './imagens.mjs';
@@ -106,6 +108,7 @@ export async function gerarCampanha(tarefa) {
   if (campanha.geracaoId && tarefa.geracaoId !== campanha.geracaoId) {
     return { ignorada: 'geracao antiga', campanhaId };
   }
+  if (await tarefaCancelada(tarefa.id)) return { cancelada: true, campanhaId };
 
   const temp = pastaTemporaria('campanha');
 
@@ -270,6 +273,7 @@ export async function regerarPeca(tarefa) {
   const campanha = await lerCampanha(campanhaId);
   const peca = await lerPeca(pecaId);
   if (!peca) throw new Error(`Peça ${pecaId} não existe.`);
+  if (await tarefaCancelada(tarefa.id)) return { cancelada: true, pecaId };
 
   const temp = pastaTemporaria('peca');
 
@@ -379,6 +383,7 @@ export async function gerarReel(tarefa) {
   if (campanha?.geracaoId && tarefa.geracaoId !== campanha.geracaoId) {
     return { ignorada: 'geracao antiga', campanhaId };
   }
+  if (await tarefaCancelada(tarefa.id)) return { cancelada: true, campanhaId };
   if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
   if (!Array.isArray(render.palavras) || !render.palavras.length) {
     throw new Error('A tarefa não trouxe as palavras com tempo, e sem elas não há legenda.');
@@ -415,6 +420,10 @@ export async function gerarReel(tarefa) {
     }, null, 2), 'utf8');
 
     const resultado = await rodarRenderizador(RENDERIZADORES.reel, configPath);
+
+    if (await tarefaCancelada(tarefa.id)) {
+      return { cancelada: true, campanhaId };
+    }
 
     // 3. Sobe o que saiu. A capa vai junto: o publicador exige o arquivo, e é ela
     // que vira a miniatura no Instagram.
@@ -507,6 +516,11 @@ export async function gerarCapa(tarefa) {
       '--config', configCapa, '--portrait', retrato, '--output', arquivoCapa,
     ], { maxBuffer: 8 * 1024 * 1024, timeout: 3 * 60 * 1000 });
     if (!fs.existsSync(arquivoCapa)) throw new Error('A capa não foi gerada.');
+
+    if (await tarefaCancelada(tarefa.id)) {
+      await atualizarCampanha(campanhaId, { capaStatus: 'revisar', capaErro: null }).catch(() => {});
+      return { cancelada: true, campanhaId };
+    }
 
     // 3. Sobe e aponta a peça para ela.
     const caminhos = await enviarPasta(saidaDir, { consultorId, campanhaId, tipo: 'reel' });

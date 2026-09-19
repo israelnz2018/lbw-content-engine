@@ -48,7 +48,7 @@ async function processarUma() {
   try {
     const resultado = await executor(tarefa);
     await concluirTarefa(tarefa.id);
-    if (resultado?.ignorada && tarefa.campanhaId) {
+    if ((resultado?.ignorada || resultado?.cancelada) && tarefa.campanhaId) {
       await normalizarCampanhaSemTarefaAtiva(tarefa.campanhaId).catch(() => {});
     }
     log('info', 'tarefa concluida', {
