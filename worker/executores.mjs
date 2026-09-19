@@ -477,6 +477,10 @@ export async function gerarCapa(tarefa) {
   const render = tarefa.render || {};
   if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
   if (!render.cover) throw new Error('A tarefa não trouxe o desenho da capa.');
+  if (await tarefaCancelada(tarefa.id)) {
+    await atualizarCampanha(campanhaId, { capaStatus: 'revisar', capaErro: null }).catch(() => {});
+    return { cancelada: true, campanhaId };
+  }
 
   const temp = pastaTemporaria('capa');
   try {
