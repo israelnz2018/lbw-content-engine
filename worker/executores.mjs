@@ -613,7 +613,7 @@ export async function publicar(tarefa) {
   });
 
   try {
-    const { rede, postId, link, facebook } = await publicarPeca(peca);
+    const { rede, postId, link, facebook, youtube } = await publicarPeca(peca);
     await gravarPeca({
       id: peca.id,
       status: 'publicado',
@@ -625,11 +625,13 @@ export async function publicar(tarefa) {
         publicadoEm: new Date().toISOString(),
         erro: null,
         // Só grava a chave quando houve tentativa — undefined derrubaria a
-        // gravação inteira, e a maioria das peças (LinkedIn) nem cruza.
+        // gravação inteira, e a maioria das peças (LinkedIn, carrossel de feed)
+        // nem cruza para essas duas.
         ...(facebook ? { facebook } : {}),
+        ...(youtube ? { youtube } : {}),
       },
     });
-    return { pecaId: peca.id, rede, postId, link, facebook: facebook?.status };
+    return { pecaId: peca.id, rede, postId, link, facebook: facebook?.status, youtube: youtube?.status };
   } catch (e) {
     const motivo = String(e?.message || e).slice(0, 500);
     await gravarPeca({

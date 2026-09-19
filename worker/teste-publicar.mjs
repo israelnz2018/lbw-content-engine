@@ -9,7 +9,8 @@
  */
 import {
   redeDaPeca, consultorLiberado, limitarLegenda, slidesDoCarrossel,
-  capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto, deveCruzarParaFacebook,
+  capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto,
+  deveCruzarParaFacebook, deveCruzarParaYoutube,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -38,6 +39,16 @@ conferir('Reel e os dois carrosséis do Instagram cruzam para o Facebook',
   deveCruzarParaFacebook('reel') && deveCruzarParaFacebook('carrossel-feed') && deveCruzarParaFacebook('carrossel-video'));
 conferir('peça de LinkedIn não cruza — não há Instagram para acompanhar',
   !deveCruzarParaFacebook('linkedin-pdf') && !deveCruzarParaFacebook('linkedin-imagem'));
+
+/* ── O bônus do YouTube ──────────────────────────────────────── */
+// Só quem já é vídeo vertical vira Short — carrossel de feed é foto, não tem
+// o que cruzar.
+conferir('Reel e carrossel em vídeo cruzam para o YouTube como Shorts',
+  deveCruzarParaYoutube('reel') && deveCruzarParaYoutube('carrossel-video'));
+conferir('carrossel de feed (fotos) não cruza para o YouTube',
+  !deveCruzarParaYoutube('carrossel-feed'));
+conferir('peça de LinkedIn não cruza para o YouTube',
+  !deveCruzarParaYoutube('linkedin-pdf') && !deveCruzarParaYoutube('linkedin-imagem'));
 
 /* ── Trava da fase 1 ─────────────────────────────────────────── */
 conferir('israel publica', consultorLiberado('israel'));

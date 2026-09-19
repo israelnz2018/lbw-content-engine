@@ -56,6 +56,16 @@ export function deveCruzarParaFacebook(tipo) {
 }
 
 /**
+ * O YouTube também é bônus — mas só de quem já é VÍDEO.
+ *
+ * O carrossel de feed (fotos) não tem o que cruzar; o Reel e o carrossel em
+ * vídeo, sim, como YouTube Shorts (os dois já nascem em 9:16).
+ */
+export function deveCruzarParaYoutube(tipo) {
+  return tipo === 'reel' || tipo === 'carrossel-video';
+}
+
+/**
  * Quem pode publicar automaticamente.
  *
  * Trava de fase 1: o token é de uma conta só. Sem esta trava, a peça de um
@@ -435,6 +445,96 @@ export async function cruzarParaFacebookSeConfigurado(peca, legenda) {
   }
 }
 
+/* ===================== YouTube (bônus do Instagram) ===================== */
+
+const YT_UPLOAD_BASE = 'https://www.googleapis.com/upload/youtube/v3/videos';
+
+/**
+ * O YouTube usa OAuth, não uma chave fixa como o Instagram: o token de acesso
+ * vence em 1 hora, e quem não vence é o REFRESH_TOKEN, obtido uma vez só (o
+ * consultor autoriza no navegador dele) e guardado no servidor. Sem as três
+ * variáveis, o cruzamento fica só desligado — nunca é erro.
+ */
+function credenciaisYoutube() {
+  const clientId = process.env.YOUTUBE_CLIENT_ID;
+  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+  const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+  return clientId && clientSecret && refreshToken ? { clientId, clientSecret, refreshToken } : null;
+}
+
+/** Troca o refresh token por um token de acesso de verdade. Um por publicação. */
+async function tokenDeAcessoYoutube({ clientId, clientSecret, refreshToken }) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId, client_secret: clientSecret,
+      refresh_token: refreshToken, grant_type: 'refresh_token',
+    }),
+  });
+  const texto = await res.text();
+  if (!res.ok) throw new Error(`Google recusou renovar o acesso ao YouTube (${res.status}): ${texto.slice(0, 400)}`);
+  return JSON.parse(texto).access_token;
+}
+
+/**
+ * Envio em duas etapas — é como a API do YouTube funciona, e não uma escolha
+ * nossa: primeiro reserva o envio com os metadados (título, descrição), o
+ * Google devolve um endereço só para os bytes, e só então o vídeo sobe.
+ */
+async function publicarNoYoutube(peca, legenda, credenciais) {
+  const token = await tokenDeAcessoYoutube(credenciais);
+  const caminho = videoDaPeca(peca);
+  if (!caminho) throw new Error('Peça sem vídeo — não há o que enviar ao YouTube.');
+  const bytes = await baixarBytes(caminho);
+
+  // #Shorts na descrição é o sinal que o próprio YouTube usa, junto com o
+  // formato vertical, para classificar como Short — não existe um campo à parte.
+  const titulo = limitarLegenda(peca.titulo || legenda, 90) || 'Reel';
+  const metadados = {
+    snippet: { title: titulo, description: `${legenda}\n\n#Shorts`, categoryId: '27' }, // 27 = Education
+    status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+  };
+
+  const iniciar = await fetch(`${YT_UPLOAD_BASE}?uploadType=resumable&part=snippet,status`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'video/mp4',
+      'X-Upload-Content-Length': String(bytes.length),
+    },
+    body: JSON.stringify(metadados),
+  });
+  if (!iniciar.ok) throw new Error(`YouTube recusou iniciar o envio (${iniciar.status}): ${(await iniciar.text()).slice(0, 400)}`);
+  const uploadUrl = iniciar.headers.get('location');
+  if (!uploadUrl) throw new Error('O YouTube não devolveu o endereço de envio do vídeo.');
+
+  const envio = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(bytes.length) },
+    body: bytes,
+  });
+  const corpo = await envio.text();
+  if (!envio.ok) throw new Error(`YouTube recusou o vídeo (${envio.status}): ${corpo.slice(0, 400)}`);
+  const { id } = JSON.parse(corpo);
+  return { postId: id, link: `https://youtube.com/shorts/${id}` };
+}
+
+/** Mesma forma do cruzamento do Facebook: silencioso sem credencial, nunca desfaz o Instagram. */
+export async function cruzarParaYoutubeSeConfigurado(peca, legenda) {
+  if (!deveCruzarParaYoutube(peca.tipo)) return null;
+  const credenciais = credenciaisYoutube();
+  if (!credenciais) return null;
+
+  try {
+    const { postId, link } = await publicarNoYoutube(peca, legenda, credenciais);
+    return { status: 'publicada', postId, link, publicadoEm: new Date().toISOString(), erro: null };
+  } catch (e) {
+    return { status: 'falhou', erro: String(e?.message || e).slice(0, 500) };
+  }
+}
+
 /* ===================== LinkedIn ===================== */
 
 function credenciaisLinkedin() {
@@ -535,10 +635,14 @@ export async function publicarPeca(pecaOuId) {
     ? await publicarNoInstagram(peca, legenda)
     : await publicarNoLinkedin(peca, legenda);
 
-  // O Facebook só é tentado DEPOIS do Instagram estar no ar, e nunca pode
-  // desfazê-lo: se falhar aqui, o resultado principal já aconteceu.
+  // Facebook e YouTube só são tentados DEPOIS do Instagram estar no ar, e
+  // nenhum dos dois pode desfazê-lo: se falharem aqui, o resultado principal
+  // já aconteceu.
   const facebook = await cruzarParaFacebookSeConfigurado(peca, legenda);
   if (facebook) resultado.facebook = facebook;
+
+  const youtube = await cruzarParaYoutubeSeConfigurado(peca, legenda);
+  if (youtube) resultado.youtube = youtube;
 
   return resultado;
 }
