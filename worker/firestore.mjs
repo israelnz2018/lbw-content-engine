@@ -94,13 +94,14 @@ export async function pegarProximaTarefa() {
     const doc = ordenadas[0];
     const tarefa = { id: doc.id, ...doc.data() };
 
+    const tentativas = (tarefa.tentativas || 0) + 1;
     t.update(doc.ref, {
       status: 'executando',
       iniciadoEm: new Date().toISOString(),
-      tentativas: (tarefa.tentativas || 0) + 1,
+      tentativas,
     });
 
-    return tarefa;
+    return { ...tarefa, tentativas };
   });
 }
 
@@ -181,4 +182,50 @@ export async function atualizarCampanha(campanhaId, campos) {
     ...campos,
     atualizadoEm: new Date().toISOString(),
   });
+}
+
+/** Recupera tarefas que ficaram executando após uma queda do worker. */
+export async function recuperarTarefasTravadas(maxAgeMs = 30 * 60 * 1000) {
+  const snap = await db().collection(COLECOES.tarefas)
+    .where('status', '==', 'executando')
+    .limit(100)
+    .get();
+  const agora = Date.now();
+  const recuperadas = [];
+
+  for (const doc of snap.docs) {
+    const tarefa = doc.data();
+    const iniciado = Date.parse(String(tarefa.iniciadoEm || ''));
+    if (!Number.isFinite(iniciado) || agora - iniciado < maxAgeMs) continue;
+
+    await doc.ref.update({
+      status: 'pendente',
+      erro: 'Tarefa recuperada após o worker ficar sem resposta.',
+      iniciadoEm: null,
+      recuperadaEm: new Date().toISOString(),
+    });
+    recuperadas.push({ id: doc.id, tipo: tarefa.tipo, campanhaId: tarefa.campanhaId });
+  }
+  return recuperadas;
+}
+
+/** Evita que uma geração antiga deixe a campanha presa em "processando". */
+export async function normalizarCampanhaSemTarefaAtiva(campanhaId) {
+  if (!campanhaId) return false;
+  const campanha = await lerCampanha(campanhaId);
+  if (!campanha || campanha.status !== 'processando') return false;
+
+  const tarefas = await db().collection(COLECOES.tarefas)
+    .where('campanhaId', '==', campanhaId)
+    .get();
+  const ativa = tarefas.docs.some((doc) => ['pendente', 'executando'].includes(String(doc.data()?.status || '')));
+  if (ativa) return false;
+
+  const pecas = await db().collection(COLECOES.pecas)
+    .where('campanhaId', '==', campanhaId)
+    .get();
+  await atualizarCampanha(campanhaId, pecas.empty
+    ? { status: 'erro', erro: 'A geração foi descartada e não produziu peças.' }
+    : { status: 'revisar', erro: null });
+  return true;
 }

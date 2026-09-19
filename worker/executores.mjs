@@ -466,10 +466,6 @@ export async function gerarReel(tarefa) {
 export async function gerarCapa(tarefa) {
   const { consultorId, campanhaId } = tarefa;
   const render = tarefa.render || {};
-  const campanha = await lerCampanha(campanhaId);
-  if (campanha?.geracaoId && tarefa.geracaoId !== campanha.geracaoId) {
-    return { ignorada: 'geracao antiga', campanhaId };
-  }
   if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
   if (!render.cover) throw new Error('A tarefa não trouxe o desenho da capa.');
 
