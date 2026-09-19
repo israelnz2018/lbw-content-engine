@@ -362,6 +362,7 @@ export async function regerarPeca(tarefa) {
     await gravarPeca({
       ...peca,
       status: 'revisar',
+      erro: null,
       versao: novaVersao,
       arquivoUrl: arquivoPrincipal || peca.arquivoUrl,
       arquivos: caminhos,
