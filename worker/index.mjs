@@ -10,7 +10,7 @@
  */
 import {
   pegarProximaTarefa, concluirTarefa, falharTarefa, atualizarCampanha, ouvirFila,
-  recuperarTarefasTravadas, normalizarCampanhaSemTarefaAtiva,
+  recuperarTarefasTravadas, normalizarCampanhaSemTarefaAtiva, gravarPeca,
 } from './firestore.mjs';
 import { EXECUTORES } from './executores.mjs';
 import { conferirAgenda } from './agenda.mjs';
@@ -58,6 +58,13 @@ async function processarUma() {
     });
   } catch (e) {
     const desistiu = await falharTarefa(tarefa.id, e?.message || e, tarefa.tentativas);
+    if (tarefa.pecaId) {
+      await gravarPeca({
+        id: tarefa.pecaId,
+        status: 'revisar',
+        erro: String(e?.message || e).slice(0, 500),
+      }).catch(() => {});
+    }
     if (desistiu && tarefa.campanhaId) {
       await atualizarCampanha(tarefa.campanhaId, {
         status: 'erro',

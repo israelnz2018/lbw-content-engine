@@ -275,7 +275,10 @@ export async function regerarPeca(tarefa) {
   const campanha = await lerCampanha(campanhaId);
   const peca = await lerPeca(pecaId);
   if (!peca) throw new Error(`Peça ${pecaId} não existe.`);
-  if (await tarefaCancelada(tarefa.id)) return { cancelada: true, pecaId };
+  if (await tarefaCancelada(tarefa.id)) {
+    await gravarPeca({ ...peca, status: 'revisar', erro: null });
+    return { cancelada: true, pecaId };
+  }
 
   const temp = pastaTemporaria('peca');
 
