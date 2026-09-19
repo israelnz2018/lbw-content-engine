@@ -279,6 +279,9 @@ export async function regerarPeca(tarefa) {
     await gravarPeca({ ...peca, status: 'revisar', erro: null });
     return { cancelada: true, pecaId };
   }
+  // A revisão individual também precisa sinalizar trabalho em curso. Assim a
+  // tela continua atualizando mesmo quando a campanha tinha um erro antigo.
+  await atualizarCampanha(campanhaId, { status: 'processando', erro: null }).catch(() => {});
 
   const temp = pastaTemporaria('peca');
 
