@@ -210,6 +210,17 @@ export async function recuperarTarefasTravadas(maxAgeMs = 30 * 60 * 1000) {
       iniciadoEm: null,
       recuperadaEm: new Date().toISOString(),
     });
+    if (tarefa.tipo === 'regerar-peca' && tarefa.pecaId) {
+      const pecaRef = db().collection(COLECOES.pecas).doc(String(tarefa.pecaId));
+      const pecaSnap = await pecaRef.get();
+      if (pecaSnap.exists && pecaSnap.data()?.status === 'gerando') {
+        await pecaRef.update({
+          status: 'revisar',
+          erro: 'A tarefa foi recuperada depois que o worker ficou sem resposta.',
+          atualizadoEm: new Date().toISOString(),
+        });
+      }
+    }
     recuperadas.push({ id: doc.id, tipo: tarefa.tipo, campanhaId: tarefa.campanhaId });
   }
   return recuperadas;

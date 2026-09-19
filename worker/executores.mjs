@@ -48,7 +48,7 @@ function pastaTemporaria(prefixo) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `lbw-${prefixo}-`));
 }
 
-async function renderizarTextoLinkedin({ campanha, criativoId, texto, temp, tipoStorage, versao = 1 }) {
+async function renderizarTextoLinkedin({ campanha, criativoId, texto, fonte = 'Cortes do curso White Belt', temp, tipoStorage, versao = 1 }) {
   const frase = String(texto || '').trim();
   if (!frase) return null;
   const configPath = path.join(temp, `config-texto-linkedin-${versao}.json`);
@@ -62,7 +62,7 @@ async function renderizarTextoLinkedin({ campanha, criativoId, texto, temp, tipo
     layout: 'texto',
     frase,
     quoteScale,
-    fonte: 'Cortes do curso White Belt',
+    fonte: String(fonte || '').trim(),
     post: frase,
     outputRoot: temp,
   }, null, 2), 'utf8');
@@ -218,11 +218,13 @@ export async function gerarCampanha(tarefa) {
     // O texto do LinkedIn e uma das seis saidas obrigatorias. Campanhas antigas
     // sem o campo da IA ainda recebem a peca usando o titulo aprovado.
     const textoLinkedin = String(criativo?.textos?.textoLinkedin || campanha.titulo || '').trim();
+    const fonteLinkedin = String(criativo?.textos?.fonteLinkedin || 'Cortes do curso White Belt').trim();
     if (textoLinkedin) {
       const textoRenderizado = await renderizarTextoLinkedin({
         campanha,
         criativoId: tarefa.criativoId,
         texto: textoLinkedin,
+        fonte: fonteLinkedin,
         temp,
         tipoStorage: `linkedin-texto/v${versaoDaProducao}`,
       });
@@ -323,6 +325,7 @@ export async function regerarPeca(tarefa) {
         campanha: { ...(campanha || {}), id: campanhaId, consultorId },
         criativoId: tarefa.criativoId,
         texto,
+        fonte: String(criativo?.textos?.fonteLinkedin || 'Cortes do curso White Belt').trim(),
         temp,
         tipoStorage: `linkedin-texto-v${novaVersao}`,
         versao: novaVersao,
@@ -347,6 +350,10 @@ export async function regerarPeca(tarefa) {
       throw new Error(`A peça ${peca.tipo} não pode ser refeita pelo renderizador de carrossel.`);
     }
 
+    if (await tarefaCancelada(tarefa.id)) {
+      await gravarPeca({ ...peca, status: 'revisar', erro: null });
+      return { cancelada: true, pecaId };
+    }
     if (!caminhos.length) throw new Error(`O renderizador não entregou arquivos para ${peca.tipo}.`);
 
     await gravarPeca({
@@ -361,6 +368,10 @@ export async function regerarPeca(tarefa) {
     });
 
     return { versao: novaVersao, arquivos: caminhos.length };
+  } catch (e) {
+    // Uma falha não pode deixar o cartão eternamente em "refazendo".
+    await gravarPeca({ ...peca, status: 'revisar', erro: String(e?.message || e).slice(0, 500) }).catch(() => {});
+    throw e;
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
