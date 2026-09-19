@@ -276,7 +276,7 @@ export async function regerarPeca(tarefa) {
   const peca = await lerPeca(pecaId);
   if (!peca) throw new Error(`Peça ${pecaId} não existe.`);
   if (await tarefaCancelada(tarefa.id)) {
-    await gravarPeca({ ...peca, status: 'revisar', erro: null });
+    await gravarPeca({ ...peca, status: 'revisar', erro: null, tarefaAtivaId: null, gerandoDesde: null });
     return { cancelada: true, pecaId };
   }
   // A revisão individual também precisa sinalizar trabalho em curso. Assim a
@@ -286,13 +286,23 @@ export async function regerarPeca(tarefa) {
   const temp = pastaTemporaria('peca');
 
   try {
-    await gravarPeca({ ...peca, status: 'gerando' });
+    await gravarPeca({
+      ...peca,
+      status: 'gerando',
+      tarefaAtivaId: tarefa.id,
+      gerandoDesde: peca.gerandoDesde || new Date().toISOString(),
+    });
 
     const ehTextoLinkedin = peca.tipo === 'linkedin-texto';
     const { render, usos } = ehTextoLinkedin
       ? { render: tarefa.render || {}, usos: [] }
       : await resolverImagensDoRender(tarefa.render || {}, consultorId);
-    const renderConfig = { ...render, outputRoot: temp };
+    // A imagem unica do LinkedIn e a primeira pagina, mas e uma peca independente.
+    // Gerar o carrossel do feed inteiro nao atualizava a imagem unica e ainda criava
+    // varias tarefas quando o consultor clicava de novo achando que nada ocorreu.
+    const renderConfig = peca.tipo === 'linkedin-imagem'
+      ? { ...render, somentePagina: 0, video: { ...(render.video || {}), enabled: false }, outputRoot: temp }
+      : { ...render, outputRoot: temp };
 
     let resultado = null;
     let porPagina = [];
@@ -344,6 +354,9 @@ export async function regerarPeca(tarefa) {
     } else if (peca.tipo === 'carrossel-feed') {
       caminhos = await subirTipo('FEED');
       arquivoPrincipal = escolherPrincipal(caminhos);
+    } else if (peca.tipo === 'linkedin-imagem') {
+      caminhos = await subirTipo('FEED');
+      arquivoPrincipal = escolherPrincipal(caminhos);
     } else if (peca.tipo === 'linkedin-pdf') {
       const documentos = await subirTipo('LINKEDIN');
       const paginas = await subirTipo('FEED');
@@ -357,7 +370,7 @@ export async function regerarPeca(tarefa) {
     }
 
     if (await tarefaCancelada(tarefa.id)) {
-      await gravarPeca({ ...peca, status: 'revisar', erro: null });
+      await gravarPeca({ ...peca, status: 'revisar', erro: null, tarefaAtivaId: null, gerandoDesde: null });
       return { cancelada: true, pecaId };
     }
     if (!caminhos.length) throw new Error(`O renderizador não entregou arquivos para ${peca.tipo}.`);
@@ -366,6 +379,8 @@ export async function regerarPeca(tarefa) {
       ...peca,
       status: 'revisar',
       erro: null,
+      tarefaAtivaId: null,
+      gerandoDesde: null,
       versao: novaVersao,
       arquivoUrl: arquivoPrincipal || peca.arquivoUrl,
       arquivos: caminhos,
@@ -379,8 +394,16 @@ export async function regerarPeca(tarefa) {
 
     return { versao: novaVersao, arquivos: caminhos.length };
   } catch (e) {
-    // Uma falha não pode deixar o cartão eternamente em "refazendo".
-    await gravarPeca({ ...peca, status: 'revisar', erro: String(e?.message || e).slice(0, 500) }).catch(() => {});
+    // Enquanto ainda houver nova tentativa, a peca continua ocupada. Na terceira
+    // falha ela e liberada com o motivo, encerrando o giro de forma definitiva.
+    const desistiu = (tarefa.tentativas || 0) >= 3;
+    await gravarPeca({
+      ...peca,
+      status: desistiu ? 'revisar' : 'gerando',
+      erro: desistiu ? String(e?.message || e).slice(0, 500) : null,
+      tarefaAtivaId: desistiu ? null : tarefa.id,
+      gerandoDesde: desistiu ? null : (peca.gerandoDesde || new Date().toISOString()),
+    }).catch(() => {});
     throw e;
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
@@ -404,7 +427,12 @@ export async function gerarReel(tarefa) {
   if (campanha?.geracaoId && tarefa.geracaoId !== campanha.geracaoId) {
     return { ignorada: 'geracao antiga', campanhaId };
   }
-  if (await tarefaCancelada(tarefa.id)) return { cancelada: true, campanhaId };
+  if (await tarefaCancelada(tarefa.id)) {
+    await atualizarCampanha(campanhaId, {
+      status: 'revisar', erro: null, reelTarefaAtivaId: null,
+    }).catch(() => {});
+    return { cancelada: true, campanhaId };
+  }
   if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
   if (!Array.isArray(render.palavras) || !render.palavras.length) {
     throw new Error('A tarefa não trouxe as palavras com tempo, e sem elas não há legenda.');
@@ -443,6 +471,9 @@ export async function gerarReel(tarefa) {
     const resultado = await rodarRenderizador(RENDERIZADORES.reel, configPath);
 
     if (await tarefaCancelada(tarefa.id)) {
+      await atualizarCampanha(campanhaId, {
+        status: 'revisar', erro: null, reelTarefaAtivaId: null,
+      }).catch(() => {});
       return { cancelada: true, campanhaId };
     }
 
@@ -475,7 +506,9 @@ export async function gerarReel(tarefa) {
       criadoEm: new Date().toISOString(),
     });
 
-    await atualizarCampanha(campanhaId, { status: 'revisar' }).catch(() => {});
+    await atualizarCampanha(campanhaId, {
+      status: 'revisar', erro: null, reelTarefaAtivaId: null,
+    }).catch(() => {});
     return { pecas: 1, segundos: resultado?.durationSeconds, arquivos: caminhos.length };
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
@@ -499,7 +532,9 @@ export async function gerarCapa(tarefa) {
   if (!render.sourceVideo) throw new Error('A tarefa não trouxe o endereço do vídeo.');
   if (!render.cover) throw new Error('A tarefa não trouxe o desenho da capa.');
   if (await tarefaCancelada(tarefa.id)) {
-    await atualizarCampanha(campanhaId, { capaStatus: 'revisar', capaErro: null }).catch(() => {});
+    await atualizarCampanha(campanhaId, {
+      capaStatus: 'revisar', capaErro: null, capaTarefaAtivaId: null,
+    }).catch(() => {});
     return { cancelada: true, campanhaId };
   }
 
@@ -543,7 +578,9 @@ export async function gerarCapa(tarefa) {
     if (!fs.existsSync(arquivoCapa)) throw new Error('A capa não foi gerada.');
 
     if (await tarefaCancelada(tarefa.id)) {
-      await atualizarCampanha(campanhaId, { capaStatus: 'revisar', capaErro: null }).catch(() => {});
+      await atualizarCampanha(campanhaId, {
+        capaStatus: 'revisar', capaErro: null, capaTarefaAtivaId: null,
+      }).catch(() => {});
       return { cancelada: true, campanhaId };
     }
 
@@ -565,7 +602,9 @@ export async function gerarCapa(tarefa) {
       });
     }
 
-    await atualizarCampanha(campanhaId, { capaStatus: 'pronta', capaErro: null }).catch(() => {});
+    await atualizarCampanha(campanhaId, {
+      capaStatus: 'pronta', capaErro: null, capaTarefaAtivaId: null,
+    }).catch(() => {});
     return { capa: nova };
   } catch (e) {
     // Na última tentativa a tela precisa saber que falhou, e não ficar girando.
@@ -573,6 +612,7 @@ export async function gerarCapa(tarefa) {
       await atualizarCampanha(campanhaId, {
         capaStatus: 'erro',
         capaErro: String(e?.message || e).slice(0, 300),
+        capaTarefaAtivaId: null,
       }).catch(() => {});
     }
     throw e;

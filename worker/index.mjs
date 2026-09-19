@@ -58,18 +58,23 @@ async function processarUma() {
     });
   } catch (e) {
     const desistiu = await falharTarefa(tarefa.id, e?.message || e, tarefa.tentativas);
-    if (tarefa.pecaId) {
+    if (tarefa.pecaId && desistiu) {
       await gravarPeca({
         id: tarefa.pecaId,
         status: 'revisar',
         erro: String(e?.message || e).slice(0, 500),
+        tarefaAtivaId: null,
+        gerandoDesde: null,
       }).catch(() => {});
     }
     if (desistiu && tarefa.campanhaId) {
-      await atualizarCampanha(tarefa.campanhaId, {
-        status: 'erro',
-        erro: String(e?.message || e).slice(0, 500),
-      }).catch(() => {});
+      const motivo = String(e?.message || e).slice(0, 500);
+      const campos = tarefa.tipo === 'gerar-capa'
+        ? { capaStatus: 'erro', capaErro: motivo, capaTarefaAtivaId: null }
+        : tarefa.tipo === 'gerar-reel'
+          ? { status: 'erro', erro: motivo, reelTarefaAtivaId: null }
+          : { status: 'erro', erro: motivo };
+      await atualizarCampanha(tarefa.campanhaId, campos).catch(() => {});
     }
     log('erro', desistiu ? 'tarefa falhou em definitivo' : 'tarefa falhou, vai tentar de novo', {
       id: tarefa.id,

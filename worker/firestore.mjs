@@ -191,7 +191,7 @@ export async function atualizarCampanha(campanhaId, campos) {
 }
 
 /** Recupera tarefas que ficaram executando após uma queda do worker. */
-export async function recuperarTarefasTravadas(maxAgeMs = 30 * 60 * 1000) {
+export async function recuperarTarefasTravadas(maxAgeMs = 20 * 60 * 1000) {
   const snap = await db().collection(COLECOES.tarefas)
     .where('status', '==', 'executando')
     .limit(100)
@@ -213,10 +213,12 @@ export async function recuperarTarefasTravadas(maxAgeMs = 30 * 60 * 1000) {
     if (tarefa.tipo === 'regerar-peca' && tarefa.pecaId) {
       const pecaRef = db().collection(COLECOES.pecas).doc(String(tarefa.pecaId));
       const pecaSnap = await pecaRef.get();
-      if (pecaSnap.exists && pecaSnap.data()?.status === 'gerando') {
+      if (pecaSnap.exists) {
         await pecaRef.update({
-          status: 'revisar',
-          erro: 'A tarefa foi recuperada depois que o worker ficou sem resposta.',
+          status: 'gerando',
+          tarefaAtivaId: doc.id,
+          gerandoDesde: new Date().toISOString(),
+          erro: null,
           atualizadoEm: new Date().toISOString(),
         });
       }
@@ -242,6 +244,8 @@ export async function normalizarPecasTravadas(maxAgeMs = 10 * 60 * 1000) {
     await doc.ref.update({
       status: 'revisar',
       erro: 'A peça foi liberada depois que não havia tarefa ativa para concluí-la.',
+      tarefaAtivaId: null,
+      gerandoDesde: null,
       atualizadoEm: new Date().toISOString(),
     });
     liberadas.push(doc.id);
@@ -265,7 +269,12 @@ export async function normalizarCampanhaSemTarefaAtiva(campanhaId) {
     .where('campanhaId', '==', campanhaId)
     .get();
   await atualizarCampanha(campanhaId, pecas.empty
-    ? { status: 'erro', erro: 'A geração foi descartada e não produziu peças.' }
-    : { status: 'revisar', erro: null });
+    ? {
+      status: 'erro', erro: 'A geração foi descartada e não produziu peças.',
+      reelTarefaAtivaId: null, capaTarefaAtivaId: null,
+    }
+    : {
+      status: 'revisar', erro: null, reelTarefaAtivaId: null, capaTarefaAtivaId: null,
+    });
   return true;
 }
