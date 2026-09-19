@@ -370,8 +370,9 @@ export async function regerarPeca(tarefa) {
       imagensPorPagina: porPagina,
       ...(instrucao || peca.pedidoMelhoria
         ? { pedidoMelhoria: instrucao || peca.pedidoMelhoria }
-        : {}),
+      : {}),
     });
+    await atualizarCampanha(campanhaId, { status: 'revisar', erro: null }).catch(() => {});
 
     return { versao: novaVersao, arquivos: caminhos.length };
   } catch (e) {
