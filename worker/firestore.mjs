@@ -226,6 +226,29 @@ export async function recuperarTarefasTravadas(maxAgeMs = 30 * 60 * 1000) {
   return recuperadas;
 }
 
+/** Libera peças que ficaram em geração sem nenhuma tarefa ativa correspondente. */
+export async function normalizarPecasTravadas(maxAgeMs = 10 * 60 * 1000) {
+  const snap = await db().collection(COLECOES.pecas).where('status', '==', 'gerando').get();
+  const agora = Date.now();
+  const liberadas = [];
+  for (const doc of snap.docs) {
+    const peca = doc.data();
+    const atualizado = Date.parse(String(peca.atualizadoEm || peca.criadoEm || ''));
+    if (!Number.isFinite(atualizado) || agora - atualizado < maxAgeMs) continue;
+    const tarefas = await db().collection(COLECOES.tarefas)
+      .where('pecaId', '==', doc.id).get();
+    const ativa = tarefas.docs.some((t) => ['pendente', 'executando'].includes(String(t.data()?.status || '')));
+    if (ativa) continue;
+    await doc.ref.update({
+      status: 'revisar',
+      erro: 'A peça foi liberada depois que não havia tarefa ativa para concluí-la.',
+      atualizadoEm: new Date().toISOString(),
+    });
+    liberadas.push(doc.id);
+  }
+  return liberadas;
+}
+
 /** Evita que uma geração antiga deixe a campanha presa em "processando". */
 export async function normalizarCampanhaSemTarefaAtiva(campanhaId) {
   if (!campanhaId) return false;

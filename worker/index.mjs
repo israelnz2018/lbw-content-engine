@@ -10,7 +10,7 @@
  */
 import {
   pegarProximaTarefa, concluirTarefa, falharTarefa, atualizarCampanha, ouvirFila,
-  recuperarTarefasTravadas, normalizarCampanhaSemTarefaAtiva, gravarPeca,
+  recuperarTarefasTravadas, normalizarPecasTravadas, normalizarCampanhaSemTarefaAtiva, gravarPeca,
 } from './firestore.mjs';
 import { EXECUTORES } from './executores.mjs';
 import { conferirAgenda } from './agenda.mjs';
@@ -113,6 +113,8 @@ async function baterONoRelogio() {
   try {
     const recuperadas = await recuperarTarefasTravadas();
     if (recuperadas.length) log('info', 'tarefas travadas recuperadas', { recuperadas });
+    const pecasLiberadas = await normalizarPecasTravadas();
+    if (pecasLiberadas.length) log('info', 'pecas travadas liberadas', { pecas: pecasLiberadas });
     const enfileiradas = await conferirAgenda();
     if (enfileiradas.length) log('info', 'peças agendadas entraram na fila', { quantas: enfileiradas.length, enfileiradas });
   } catch (e) {
