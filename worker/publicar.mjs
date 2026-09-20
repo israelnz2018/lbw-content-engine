@@ -254,9 +254,24 @@ async function baixarBytes(caminho) {
 
 /* ===================== Instagram ===================== */
 
+/**
+ * Railway guarda o valor de cada variável como uma única string. Quando alguém
+ * cola no campo um bloco com duas linhas (por exemplo, o token e logo abaixo
+ * INSTAGRAM_USER_ID=...), a API recebe as duas coisas juntas e responde
+ * "Malformed access token". Tokens OAuth não contêm espaços nem quebras de
+ * linha, então usamos somente o primeiro valor limpo e removemos um eventual
+ * nome de variável colado junto.
+ */
+function valorDeAmbiente(nome) {
+  const bruto = String(process.env[nome] ?? '').trim();
+  if (!bruto) return '';
+  const semNome = bruto.replace(new RegExp(`^${nome}\\s*=\\s*`, 'i'), '');
+  return semNome.split(/\r?\n/)[0].trim().replace(/^['"]|['"]$/g, '');
+}
+
 function credenciaisInstagram() {
-  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
-  const usuario = process.env.INSTAGRAM_USER_ID;
+  const token = valorDeAmbiente('INSTAGRAM_ACCESS_TOKEN');
+  const usuario = valorDeAmbiente('INSTAGRAM_USER_ID');
   if (!token || !usuario) {
     throw new Error('Faltam INSTAGRAM_ACCESS_TOKEN e INSTAGRAM_USER_ID no servidor.');
   }
@@ -364,8 +379,8 @@ export async function publicarNoInstagram(peca, legenda) {
  * normalmente sem ele.
  */
 function credenciaisFacebook() {
-  const token = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
-  const paginaId = process.env.FACEBOOK_PAGE_ID;
+  const token = valorDeAmbiente('FACEBOOK_PAGE_ACCESS_TOKEN');
+  const paginaId = valorDeAmbiente('FACEBOOK_PAGE_ID');
   return token && paginaId ? { token, paginaId } : null;
 }
 
@@ -456,9 +471,9 @@ const YT_UPLOAD_BASE = 'https://www.googleapis.com/upload/youtube/v3/videos';
  * variáveis, o cruzamento fica só desligado — nunca é erro.
  */
 function credenciaisYoutube() {
-  const clientId = process.env.YOUTUBE_CLIENT_ID;
-  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
-  const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+  const clientId = valorDeAmbiente('YOUTUBE_CLIENT_ID');
+  const clientSecret = valorDeAmbiente('YOUTUBE_CLIENT_SECRET');
+  const refreshToken = valorDeAmbiente('YOUTUBE_REFRESH_TOKEN');
   return clientId && clientSecret && refreshToken ? { clientId, clientSecret, refreshToken } : null;
 }
 
@@ -538,8 +553,8 @@ export async function cruzarParaYoutubeSeConfigurado(peca, legenda) {
 /* ===================== LinkedIn ===================== */
 
 function credenciaisLinkedin() {
-  const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  const pessoa = process.env.LINKEDIN_PERSON_ID;
+  const token = valorDeAmbiente('LINKEDIN_ACCESS_TOKEN');
+  const pessoa = valorDeAmbiente('LINKEDIN_PERSON_ID');
   if (!token || !pessoa) {
     throw new Error('Faltam LINKEDIN_ACCESS_TOKEN e LINKEDIN_PERSON_ID no servidor.');
   }
