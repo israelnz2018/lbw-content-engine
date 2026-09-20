@@ -678,7 +678,12 @@ export async function publicar(tarefa) {
   const peca = await lerPeca(tarefa.pecaId);
   if (!peca) throw new Error(`Peça ${tarefa.pecaId} não existe.`);
 
-  if (jaSaiu(peca)) {
+  // O botÃ£o Publicar agora grava "publicando" na mesma transaÃ§Ã£o que cria a
+  // tarefa. Esse estado nÃ£o pode fazer a prÃ³pria tarefa ser ignorada; sÃ³ Ã©
+  // bloqueio quando pertence a outra tentativa ou ficou preso.
+  const estaPublicandoNestaTarefa = peca.publicacao?.status === 'publicando'
+    && peca.publicacao?.tarefaId === tarefa.id;
+  if (jaSaiu(peca) && !estaPublicandoNestaTarefa) {
     return { pecaId: peca.id, ignorada: 'já publicada' };
   }
 
