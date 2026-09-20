@@ -266,7 +266,10 @@ function valorDeAmbiente(nome) {
   const bruto = String(process.env[nome] ?? '').trim();
   if (!bruto) return '';
   const semNome = bruto.replace(new RegExp(`^${nome}\\s*=\\s*`, 'i'), '');
-  return semNome.split(/\r?\n/)[0].trim().replace(/^['"]|['"]$/g, '');
+  return semNome
+    .split(/\r?\n|(?=\b[A-Z][A-Z0-9_]+\s*=)/)[0]
+    .trim()
+    .replace(/^['"]|['"]$/g, '');
 }
 
 function credenciaisInstagram() {
