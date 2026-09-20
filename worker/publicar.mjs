@@ -281,10 +281,10 @@ function credenciaisInstagram() {
   return { token, usuario };
 }
 
-async function postarGraph(caminho, params) {
+async function postarGraph(caminho, params, rede = 'Instagram') {
   const res = await fetch(`${IG_BASE}/${caminho}?${new URLSearchParams(params)}`, { method: 'POST' });
   const texto = await res.text();
-  if (!res.ok) throw new Error(`Instagram recusou (${res.status}): ${texto.slice(0, 400)}`);
+  if (!res.ok) throw new Error(`${rede} recusou (${res.status}): ${texto.slice(0, 400)}`);
   return JSON.parse(texto);
 }
 
@@ -411,7 +411,7 @@ async function publicarFotosFacebook(peca, legenda, { token, paginaId }) {
 
   const anexos = [];
   for (const url of enderecos) {
-    const { id } = await postarGraph(`${paginaId}/photos`, { url, published: 'false', access_token: token });
+    const { id } = await postarGraph(`${paginaId}/photos`, { url, published: 'false', access_token: token }, 'Facebook');
     anexos.push({ media_fbid: id });
   }
 
@@ -419,7 +419,7 @@ async function publicarFotosFacebook(peca, legenda, { token, paginaId }) {
     message: legenda,
     attached_media: JSON.stringify(anexos),
     access_token: token,
-  });
+  }, 'Facebook');
 }
 
 /** Reel e carrossel em vídeo viram vídeo comum na Página. */
@@ -427,7 +427,7 @@ async function publicarVideoFacebook(peca, legenda, { token, paginaId }) {
   const video = await enderecoPublico(videoDaPeca(peca));
   return postarGraph(`${paginaId}/videos`, {
     file_url: video, description: legenda, access_token: token,
-  });
+  }, 'Facebook');
 }
 
 /**
