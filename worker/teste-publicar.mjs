@@ -83,6 +83,16 @@ const reel = {
 };
 conferir('acha o vídeo do Reel', videoDaPeca(reel) === 'm/reel/reel.mp4');
 conferir('acha a capa do Reel', capaDaPeca(reel) === 'm/reel/capa.jpg');
+conferir('a capa versionada vence a capa antiga', capaDaPeca({
+  ...reel,
+  capaUrl: 'm/reel/capa-1720000000000.jpg',
+  arquivos: ['m/reel/capa.jpg', 'm/reel/reel.mp4', 'm/reel/capa-1720000000000.jpg'],
+}) === 'm/reel/capa-1720000000000.jpg');
+conferir('a capa versionada é encontrada mesmo sem capaUrl', capaDaPeca({
+  ...reel,
+  capaUrl: null,
+  arquivos: ['m/reel/capa.jpg', 'm/reel/reel.mp4', 'm/reel/capa-1720000000000.jpg'],
+}) === 'm/reel/capa-1720000000000.jpg');
 conferir('acha o PDF do LinkedIn',
   pdfDaPeca({ arquivos: ['m/li/documento.pdf'] }) === 'm/li/documento.pdf');
 

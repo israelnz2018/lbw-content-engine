@@ -117,7 +117,14 @@ export function videoDaPeca(peca) {
 }
 
 export function capaDaPeca(peca) {
-  return acharArquivo(peca, /capa\.(jpe?g|png)$/i)
+  // A capa refeita recebe um nome versionado (capa-<timestamp>.jpg). O campo
+  // capaUrl é a fonte de verdade e deve vencer a lista histórica de arquivos;
+  // caso ele não exista, ainda aceitamos os nomes antigos e os versionados.
+  const indicada = String(peca?.capaUrl || '').trim();
+  if (indicada && /\.(jpe?g|png)(?:\?|$)/i.test(indicada)) return indicada;
+  return acharArquivo(peca, /capa-\d+\.(jpe?g|png)$/i)
+    || acharArquivo(peca, /instagram-cover-\d+\.(jpe?g|png)$/i)
+    || acharArquivo(peca, /capa\.(jpe?g|png)$/i)
     || acharArquivo(peca, /instagram-cover\.(jpe?g|png)$/i);
 }
 
@@ -453,7 +460,18 @@ async function publicarNoFacebook(peca, legenda, credenciais) {
 export async function cruzarParaFacebookSeConfigurado(peca, legenda) {
   if (!deveCruzarParaFacebook(peca.tipo)) return null;
   const credenciais = credenciaisFacebook();
-  if (!credenciais) return null;
+  // Retornar o estado em vez de simplesmente desaparecer deixa claro na tela
+  // quando o worker ainda não recebeu o token da Página. Sem isso, o Instagram
+  // podia sair normalmente e parecer que o Facebook foi ignorado.
+  if (!credenciais) {
+    return {
+      status: 'nao_configurado',
+      postId: null,
+      link: null,
+      publicadoEm: null,
+      erro: 'Facebook não configurado no worker: faltam FACEBOOK_PAGE_ACCESS_TOKEN e/ou FACEBOOK_PAGE_ID.',
+    };
+  }
 
   try {
     const { postId, link } = await publicarNoFacebook(peca, legenda, credenciais);
