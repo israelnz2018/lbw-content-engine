@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ajustarTitulo } from './ajustar-titulo.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const raizProjeto = path.resolve(scriptDir, '..', '..', '..');
@@ -144,11 +145,13 @@ fs.mkdirSync(trabalho, { recursive: true });
 
 // Vão em arquivo, e não inline, porque acento e aspas dentro de drawtext exigem
 // uma escapada que muda conforme o sistema. Com textfile, o ffmpeg lê UTF-8 direto.
-const arquivoTitulo1 = path.join(trabalho, 'title-line-1.txt');
-const arquivoTitulo2 = path.join(trabalho, 'title-line-2.txt');
+const tituloAjustado = await ajustarTitulo(config.titleLine1, config.titleLine2, fonte);
+const arquivosTitulo = tituloAjustado.linhas.map((linha, i) => {
+  const arquivo = path.join(trabalho, `title-line-${i + 1}.txt`);
+  fs.writeFileSync(arquivo, linha, 'utf8');
+  return arquivo;
+});
 const arquivoMarca = path.join(trabalho, 'brand.txt');
-fs.writeFileSync(arquivoTitulo1, String(config.titleLine1 ?? ''), 'utf8');
-fs.writeFileSync(arquivoTitulo2, String(config.titleLine2 ?? ''), 'utf8');
 fs.writeFileSync(arquivoMarca, String(config.brandText ?? ''), 'utf8');
 
 /* ── O grafo de filtros ────────────────────────────────────── */
@@ -160,6 +163,9 @@ const f = caminhoParaFiltro(fonte);
 // A 1x a expressão fica LITERALMENTE a de antes, sem divisão nenhuma: o caminho
 // normal continua sendo o caminho que já foi medido.
 const setpts = velocidade === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)/${velocidade}`;
+const filtrosTitulo = arquivosTitulo.map((arquivo, i) =>
+  `drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivo)}':fontcolor=${i === 0 ? '0x0757FF' : '0x062B61'}:fontsize=${tituloAjustado.fonte}:x=(w-text_w)/2:y=${tituloAjustado.posicoesY[i]}:expansion=none`,
+).join(',');
 const filtro = [
   // NAO REMOVER o setpts=PTS-STARTPTS das duas ramificacoes abaixo.
   // O filtro color gera o fundo a partir do tempo zero, mas a fonte entra com -ss antes
@@ -178,8 +184,7 @@ const filtro = [
   `[1:v]scale=60:60[logo]`,
   `[head][logo]overlay=40:20[branded]`,
   `[branded]drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoMarca)}':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,`
-  + `drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoTitulo1)}':fontcolor=0x0757FF:fontsize=70:x=(w-text_w)/2:y=135:expansion=none,`
-  + `drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoTitulo2)}':fontcolor=0x062B61:fontsize=70:x=(w-text_w)/2:y=215:expansion=none,`
+  + `${filtrosTitulo},`
   + `subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`,
 ].join(';\n');
 

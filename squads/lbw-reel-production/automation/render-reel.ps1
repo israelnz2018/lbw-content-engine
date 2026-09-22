@@ -70,21 +70,28 @@ if ((Test-Path -LiteralPath $output) -and -not [bool]$config.allowOverwrite) {
 }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $output), $workDir | Out-Null
 
-$title1File = Join-Path $workDir 'title-line-1.txt'
-$title2File = Join-Path $workDir 'title-line-2.txt'
 $brandFile = Join-Path $workDir 'brand.txt'
 $temporaryOutput = Join-Path $workDir 'render-validacao.mp4'
 $instagramCover = Join-Path $workDir 'instagram-cover.jpg'
 $coverPortrait = Join-Path $workDir 'cover-portrait.jpg'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-[IO.File]::WriteAllText($title1File, [string]$config.titleLine1, $utf8)
-[IO.File]::WriteAllText($title2File, [string]$config.titleLine2, $utf8)
+$tituloScript = Join-Path $PSScriptRoot 'ajustar-titulo.mjs'
+$tituloJson = & node $tituloScript ([string]$config.titleLine1) ([string]$config.titleLine2) 'C:/Windows/Fonts/arialbd.ttf'
+if ($LASTEXITCODE -ne 0) { throw 'Não foi possível ajustar o título às margens do Reel.' }
+$tituloAjustado = $tituloJson | ConvertFrom-Json
+$titleFilters = @()
+for ($i = 0; $i -lt $tituloAjustado.linhas.Count; $i++) {
+  $titleFile = Join-Path $workDir "title-line-$($i + 1).txt"
+  [IO.File]::WriteAllText($titleFile, [string]$tituloAjustado.linhas[$i], $utf8)
+  $titleFilterPath = Convert-ToFilterPath $titleFile
+  $titleColor = if ($i -eq 0) { '0x0757FF' } else { '0x062B61' }
+  $titleFilters += "drawtext=fontfile='C\:/Windows/Fonts/arialbd.ttf':textfile='$titleFilterPath':fontcolor=$($titleColor):fontsize=$($tituloAjustado.fonte):x=(w-text_w)/2:y=$($tituloAjustado.posicoesY[$i]):expansion=none"
+}
+$titleFiltersJoined = $titleFilters -join ','
 [IO.File]::WriteAllText($brandFile, [string]$config.brandText, $utf8)
 
 $layout = $config.layout
 $captionFilterPath = Convert-ToFilterPath $captions
-$title1FilterPath = Convert-ToFilterPath $title1File
-$title2FilterPath = Convert-ToFilterPath $title2File
 $brandFilterPath = Convert-ToFilterPath $brandFile
 
 # NAO REMOVER o setpts=PTS-STARTPTS das duas ramificacoes abaixo.
@@ -104,7 +111,7 @@ color=c=0xF3F7FC:s=1080x1920:r=30[canvas];
 [tmp2]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head];
 [1:v]scale=60:60[logo];
 [head][logo]overlay=40:20[branded];
-[branded]drawtext=fontfile='C\:/Windows/Fonts/arialbd.ttf':textfile='$brandFilterPath':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,drawtext=fontfile='C\:/Windows/Fonts/arialbd.ttf':textfile='$title1FilterPath':fontcolor=0x0757FF:fontsize=70:x=(w-text_w)/2:y=135:expansion=none,drawtext=fontfile='C\:/Windows/Fonts/arialbd.ttf':textfile='$title2FilterPath':fontcolor=0x062B61:fontsize=70:x=(w-text_w)/2:y=215:expansion=none,subtitles='$captionFilterPath'[outv]
+[branded]drawtext=fontfile='C\:/Windows/Fonts/arialbd.ttf':textfile='$brandFilterPath':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,$titleFiltersJoined,subtitles='$captionFilterPath'[outv]
 "@
 
 ffmpeg -y -hide_banner -ss $config.clipStart -t $durationSeconds -i $source -loop 1 -i $logo `

@@ -26,6 +26,7 @@ ENTRADA/
 ENTREGAS/
 _producao/
 _build/
+squads/*/output/
 
 # ---- Acervo e outros projetos que moram nesta pasta ----
 "Digital LBW"/

@@ -80,7 +80,7 @@ const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><sty
 .brand-badge{width:94px;height:94px;border-radius:19px;display:grid;place-items:center;background:${palette.ink};flex:0 0 auto}.brand-badge img{width:76px;height:76px;object-fit:contain}
 .brand-name{font-size:32px;line-height:1;font-weight:900;letter-spacing:1px;white-space:nowrap}.series-row{margin-top:20px;display:flex;align-items:center;gap:15px}
 .series{padding:13px 22px 12px;border-radius:10px;color:#fff;background:${palette.accent};font-size:30px;line-height:1;font-weight:900;letter-spacing:1.5px}
-.hook{position:relative;z-index:3;width:960px;margin-top:27px;font-weight:950;font-style:italic;text-transform:uppercase;letter-spacing:-4.5px;line-height:.91}.hook .line{display:block;font-size:104px}.hook .line:first-child{color:${palette.accent}}.hook .line:not(:first-child){color:${palette.ink}}
+.hook{position:relative;z-index:3;width:960px;margin-top:27px;font-weight:950;font-style:italic;text-transform:uppercase;letter-spacing:-4.5px;line-height:.91}.hook .line{display:block;font-size:104px;overflow-wrap:anywhere}.hook .line:first-child{color:${palette.accent}}.hook .line:not(:first-child){color:${palette.ink}}
 .rule{position:absolute;left:0;top:515px;width:610px;height:14px;border-radius:10px;background:${palette.highlight};z-index:3}
 .portrait-shell{position:absolute;z-index:2;right:-90px;bottom:0;width:900px;height:950px;border-radius:52% 48% 10% 10% / 54% 54% 10% 10%;overflow:hidden;background:#EAF1FA;border:13px solid ${palette.ink};box-shadow:0 27px 0 ${palette.highlight}}
 .portrait-shell img{width:100%;height:100%;object-fit:cover;object-position:center 34%;transform:scale(1.13)}
@@ -109,47 +109,42 @@ ${(series || episode) ? `<div class="series-row"><span class="series">${[series,
  * continuar saindo exatamente como o padrao homologado.
  */
 async function ajustarGancho(pagina) {
-  await pagina.evaluate(() => {
+  return pagina.evaluate(() => {
     const gancho = document.querySelector('.hook');
     const regua = document.querySelector('.rule');
     if (!gancho) return;
     const linhas = [...gancho.querySelectorAll('.line')];
     if (!linhas.length) return;
 
-    /** Uma linha "cabe" quando ocupa a altura de uma linha so. */
-    const cabe = () => linhas.every((l) => {
-      const fonte = parseFloat(getComputedStyle(l).fontSize);
-      return l.getBoundingClientRect().height < fonte * 1.35;
-    });
-
-    // Tambem nao pode descer sobre o retrato: com o gancho livre, quatro ou cinco
-    // linhas cabem na largura e ainda assim invadiriam a foto. O retrato comeca em
-    // 600px dentro da area segura; o gancho para antes, deixando lugar para a regua.
-    const LIMITE_EMBAIXO = 540;
-    const cabeNaAltura = () => gancho.offsetTop + gancho.offsetHeight <= LIMITE_EMBAIXO;
-
+    // Deixa o navegador quebrar as linhas conforme o texto real. Antes o ajuste
+    // parava em 46px e salvava a imagem mesmo se a última palavra ficasse cortada.
+    const cabe = () => gancho.scrollWidth <= gancho.clientWidth + 1
+      && gancho.offsetTop + gancho.offsetHeight <= 535;
     let tamanho = 104;
-    while ((!cabe() || !cabeNaAltura()) && tamanho > 46) {
-      tamanho -= 4;
+    while (!cabe() && tamanho > 12) {
+      tamanho -= 2;
       linhas.forEach((l) => { l.style.fontSize = `${tamanho}px`; });
     }
+    if (!cabe()) throw new Error('O texto inteiro não cabe na capa, mesmo com a fonte mínima. Revise a composição antes de gerar.');
 
     if (regua) {
       const fimDoGancho = gancho.offsetTop + gancho.offsetHeight;
       const desenhado = 515;
       regua.style.top = `${Math.max(desenhado, fimDoGancho + 42)}px`;
     }
+    return { fonte: tamanho, altura: gancho.offsetHeight, texto: linhas.map((linha) => linha.textContent).join(' ') };
   });
 }
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 const browser = await chromium.launch({ headless: true });
+let hookLayout;
 try {
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: 'load' });
-  await ajustarGancho(page);
+  hookLayout = await ajustarGancho(page);
   await page.screenshot({ path: outputPath, type: 'jpeg', quality: 94 });
 } finally {
   await browser.close();
 }
-console.log(JSON.stringify({ outputPath, courseKey: cover.courseKey, episode, profileSafeZone: { x: 55, y: 250, width: 970, height: 1410 }, centralHookZone: { x: 55, y: 420, width: 970, height: 1080 } }, null, 2));
+console.log(JSON.stringify({ outputPath, courseKey: cover.courseKey, episode, hookLayout, profileSafeZone: { x: 55, y: 250, width: 970, height: 1410 }, centralHookZone: { x: 55, y: 420, width: 970, height: 1080 } }, null, 2));

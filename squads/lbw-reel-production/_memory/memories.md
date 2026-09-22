@@ -65,11 +65,21 @@ positivo neste formato. O slide ocupa ~91% da tela e é estático; o professor f
 bolha de ~9%. O movimento dele é diluído na média do quadro e reportado como
 congelamento. Não usar esse filtro para julgar estes vídeos.
 
+**Título do vídeo passando das margens laterais (2026-09-22).** `render-reel.mjs` e
+`render-reel.ps1` desenhavam o título com `fontsize=70` fixo, sem medir a largura real do
+texto — um título comprido simplesmente vazava para fora dos 1080 px do vídeo. A correção
+(`automation/ajustar-titulo.mjs`) mede o texto de verdade com o MESMO `drawtext` e a MESMA
+fonte do vídeo, e encolhe a fonte até caber dentro de `LARGURA_TITULO` (780 px, ou seja
+150 px livres de cada lado). Não rejeitar o vídeo por um título comprido: o script tenta
+1, 2 e 3 linhas e só recusa se o texto realmente não couber nem a 22px, o que só acontece
+com uma única palavra absurdamente longa. **Não voltar a `fontsize=70` fixo sem medição.**
+
 ## Não regenerar
 
-- `automation/render-reel.ps1` foi ajustado à mão em 2026-09-11 e 2026-09-12: escala da logo
-  (`scale=60:60`, marca em `x=120`), `setpts=PTS-STARTPTS` nas ramificações do vídeo,
-  geração de capa dedicada e cópia da `capa.jpg` para a pasta de entrega.
+- `automation/render-reel.ps1` foi ajustado à mão em 2026-09-11, 2026-09-12 e 2026-09-22:
+  escala da logo (`scale=60:60`, marca em `x=120`), `setpts=PTS-STARTPTS` nas ramificações
+  do vídeo, geração de capa dedicada, cópia da `capa.jpg` para a pasta de entrega, e o
+  título chamando `ajustar-titulo.mjs` em vez de `fontsize=70` fixo.
   **O Arquiteto não deve regenerá-lo** — isso devolveria a logo deformada, o quadro zero
-  pelado e a capa sem validação.
+  pelado, a capa sem validação e o título vazando pelas margens.
 - Logo e pessoas vêm de `assets/marca/` e `assets/pessoas/`, compartilhadas na raiz.
