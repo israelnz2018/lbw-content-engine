@@ -10,7 +10,7 @@
 import {
   redeDaPeca, consultorLiberado, limitarLegenda, slidesDoCarrossel,
   capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto,
-  deveCruzarParaFacebook, deveCruzarParaYoutube,
+  deveCruzarParaFacebook, deveCruzarParaYoutube, credenciaisFacebook,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -93,6 +93,40 @@ conferir('a capa versionada é encontrada mesmo sem capaUrl', capaDaPeca({
   capaUrl: null,
   arquivos: ['m/reel/capa.jpg', 'm/reel/reel.mp4', 'm/reel/capa-1720000000000.jpg'],
 }) === 'm/reel/capa-1720000000000.jpg');
+
+// Reproduz o caso real: um token de Página antigo existe, mas o token válido
+// de usuário permite obter outro para a Página correta.
+const fetchOriginal = globalThis.fetch;
+const ambienteOriginal = {
+  INSTAGRAM_ACCESS_TOKEN: process.env.INSTAGRAM_ACCESS_TOKEN,
+  FACEBOOK_PAGE_ACCESS_TOKEN: process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
+  FACEBOOK_PAGE_ID: process.env.FACEBOOK_PAGE_ID,
+};
+try {
+  process.env.INSTAGRAM_ACCESS_TOKEN = 'usuario-valido';
+  process.env.FACEBOOK_PAGE_ACCESS_TOKEN = 'pagina-expirada';
+  process.env.FACEBOOK_PAGE_ID = '763254156865937';
+  globalThis.fetch = async (url) => {
+    const pedido = new URL(url);
+    conferir('consulta a Página usando o token de usuário', pedido.searchParams.get('access_token') === 'usuario-valido');
+    return {
+      ok: true,
+      json: async () => ({ data: [
+        { id: 'outra-pagina', access_token: 'token-errado', tasks: ['CREATE_CONTENT'] },
+        { id: '763254156865937', access_token: 'pagina-atual', tasks: ['CREATE_CONTENT'] },
+      ] }),
+    };
+  };
+  const atual = await credenciaisFacebook();
+  conferir('Facebook usa o token atual da Página correta, mesmo com token antigo expirado',
+    atual.token === 'pagina-atual' && atual.paginaId === '763254156865937');
+} finally {
+  globalThis.fetch = fetchOriginal;
+  for (const [nome, valor] of Object.entries(ambienteOriginal)) {
+    if (valor === undefined) delete process.env[nome];
+    else process.env[nome] = valor;
+  }
+}
 conferir('acha o PDF do LinkedIn',
   pdfDaPeca({ arquivos: ['m/li/documento.pdf'] }) === 'm/li/documento.pdf');
 

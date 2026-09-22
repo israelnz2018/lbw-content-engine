@@ -365,20 +365,20 @@ async function publicarReelInstagram(peca, legenda, { token, usuario }) {
   });
   // Cinco minutos: o Instagram baixa e transcodifica o vídeo do zero.
   await esperarContainer(id, token, 5 * 60_000);
-  return id;
+  return { id, capaUrlEnviada: arquivoCapa || null };
 }
 
 export async function publicarNoInstagram(peca, legenda) {
   const credenciais = credenciaisInstagram();
-  const container = peca.tipo === 'carrossel-feed'
-    ? await publicarCarrosselInstagram(peca, legenda, credenciais)
+  const publicado = peca.tipo === 'carrossel-feed'
+    ? { id: await publicarCarrosselInstagram(peca, legenda, credenciais), capaUrlEnviada: null }
     : await publicarReelInstagram(peca, legenda, credenciais);
 
   const { id: postId } = await postarGraph(`${credenciais.usuario}/media_publish`, {
-    creation_id: container, access_token: credenciais.token,
+    creation_id: publicado.id, access_token: credenciais.token,
   });
   const link = await permalinkInstagram(postId, credenciais.token);
-  return { rede: 'instagram', postId, link };
+  return { rede: 'instagram', postId, link, capaUrlEnviada: publicado.capaUrlEnviada };
 }
 
 /* ===================== Facebook (bônus do Instagram) ===================== */
@@ -388,10 +388,39 @@ export async function publicarNoInstagram(peca, legenda) {
  * delas NÃO é erro — o cruzamento é opcional, e a peça vai para o Instagram
  * normalmente sem ele.
  */
-function credenciaisFacebook() {
-  const token = valorDeAmbiente('FACEBOOK_PAGE_ACCESS_TOKEN');
+export async function credenciaisFacebook() {
   const paginaId = valorDeAmbiente('FACEBOOK_PAGE_ID');
-  return token && paginaId ? { token, paginaId } : null;
+  if (!paginaId) throw new Error('Falta FACEBOOK_PAGE_ID no worker.');
+
+  // O token de Página copiado manualmente pode expirar sem afetar o Instagram.
+  // O token de usuário usado pelo Instagram já tem acesso à Página; a Meta
+  // devolve o token atual dela por /me/accounts. Selecionar pelo ID evita
+  // publicar acidentalmente em outra Página administrada pelo mesmo usuário.
+  const usuarioToken = valorDeAmbiente('INSTAGRAM_ACCESS_TOKEN');
+  if (usuarioToken) {
+    const url = new URL(`${IG_BASE}/me/accounts`);
+    url.search = new URLSearchParams({
+      fields: 'id,access_token,tasks', limit: '100', access_token: usuarioToken,
+    }).toString();
+    const resposta = await fetch(url);
+    const dados = await resposta.json();
+    if (!resposta.ok) {
+      throw new Error(`Não foi possível atualizar o acesso à Página do Facebook (${resposta.status}): ${String(dados?.error?.message || 'erro da Meta').slice(0, 200)}`);
+    }
+    const pagina = (dados.data || []).find((item) => String(item.id) === paginaId);
+    if (!pagina?.access_token) {
+      throw new Error(`A Página ${paginaId} não está disponível na autorização atual do Instagram.`);
+    }
+    if (Array.isArray(pagina.tasks) && !pagina.tasks.includes('CREATE_CONTENT')) {
+      throw new Error(`A autorização atual não permite criar conteúdo na Página ${paginaId}.`);
+    }
+    return { token: pagina.access_token, paginaId };
+  }
+
+  // Compatibilidade com instalações antigas sem token de usuário do Instagram.
+  const token = valorDeAmbiente('FACEBOOK_PAGE_ACCESS_TOKEN');
+  if (!token) throw new Error('Faltam INSTAGRAM_ACCESS_TOKEN e FACEBOOK_PAGE_ACCESS_TOKEN no worker.');
+  return { token, paginaId };
 }
 
 async function permalinkFacebook(id, token) {
@@ -459,21 +488,8 @@ async function publicarNoFacebook(peca, legenda, credenciais) {
  */
 export async function cruzarParaFacebookSeConfigurado(peca, legenda) {
   if (!deveCruzarParaFacebook(peca.tipo)) return null;
-  const credenciais = credenciaisFacebook();
-  // Retornar o estado em vez de simplesmente desaparecer deixa claro na tela
-  // quando o worker ainda não recebeu o token da Página. Sem isso, o Instagram
-  // podia sair normalmente e parecer que o Facebook foi ignorado.
-  if (!credenciais) {
-    return {
-      status: 'nao_configurado',
-      postId: null,
-      link: null,
-      publicadoEm: null,
-      erro: 'Facebook não configurado no worker: faltam FACEBOOK_PAGE_ACCESS_TOKEN e/ou FACEBOOK_PAGE_ID.',
-    };
-  }
-
   try {
+    const credenciais = await credenciaisFacebook();
     const { postId, link } = await publicarNoFacebook(peca, legenda, credenciais);
     return { status: 'publicada', postId, link, publicadoEm: new Date().toISOString(), erro: null };
   } catch (e) {

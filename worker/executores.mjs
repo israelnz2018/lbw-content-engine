@@ -693,7 +693,7 @@ export async function publicar(tarefa) {
   });
 
   try {
-    const { rede, postId, link, facebook, youtube } = await publicarPeca(peca);
+    const { rede, postId, link, capaUrlEnviada, facebook, youtube } = await publicarPeca(peca);
     await gravarPeca({
       id: peca.id,
       status: 'publicado',
@@ -702,6 +702,7 @@ export async function publicar(tarefa) {
         status: 'publicada',
         postId,
         link: link || null,
+        ...(capaUrlEnviada ? { capaUrlEnviada } : {}),
         publicadoEm: new Date().toISOString(),
         erro: null,
         // Só grava a chave quando houve tentativa — undefined derrubaria a
