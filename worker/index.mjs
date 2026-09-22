@@ -24,6 +24,16 @@ const INTERVALO_MS = Number(process.env.INTERVALO_FILA_MS || 60000);
 const INTERVALO_AGENDA_MS = Number(process.env.INTERVALO_AGENDA_MS || 5 * 60000);
 const UMA_VEZ = process.argv.includes('--uma-vez');
 
+/**
+ * Qual commit está rodando de verdade.
+ *
+ * Sem isto não havia como saber se um push chegou ao Railway: a correção era
+ * empurrada, o painel não mostrava nada de novo, e restava adivinhar entre
+ * "o deploy não disparou" e "disparou e não mudou nada". O Railway injeta
+ * RAILWAY_GIT_COMMIT_SHA em toda build; fora dele o valor é 'local'.
+ */
+const VERSAO = (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7) || 'local';
+
 let encerrando = false;
 
 function log(nivel, msg, extra) {
@@ -138,7 +148,7 @@ async function laco() {
     return;
   }
 
-  log('info', 'worker iniciado', { modo: 'ouvinte', batidaMs: INTERVALO_MS });
+  log('info', 'worker iniciado', { modo: 'ouvinte', batidaMs: INTERVALO_MS, versao: VERSAO });
 
   // A campainha: acorda na hora em que a tarefa entra na fila.
   const parar = ouvirFila((erro) => {
