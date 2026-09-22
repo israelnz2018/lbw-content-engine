@@ -427,7 +427,8 @@ async function permalinkFacebook(id, token) {
   try {
     const res = await fetch(`${IG_BASE}/${id}?${new URLSearchParams({ fields: 'permalink_url', access_token: token })}`);
     if (!res.ok) return null;
-    return (await res.json()).permalink_url ?? null;
+    const link = String((await res.json()).permalink_url || '').trim();
+    return link.startsWith('/') ? `https://www.facebook.com${link}` : link || null;
   } catch {
     return null;
   }
