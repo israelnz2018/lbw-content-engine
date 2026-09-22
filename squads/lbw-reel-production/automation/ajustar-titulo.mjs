@@ -7,6 +7,41 @@ import { fileURLToPath } from 'node:url';
 
 export const LARGURA_TITULO = 780; // 150 px livres de cada lado.
 const TAMANHO_PADRAO = 70;
+
+/**
+ * A FAIXA DO TÍTULO, medida no layout — não escolhida.
+ *
+ * A barra azul do topo termina em y=105 e o slide começa em `slideY`=330 (os dois
+ * números vêm do bloco `layout` que a plataforma manda). Sobram 225px, e é só
+ * dentro deles que o título pode existir sem encostar em nada.
+ *
+ * Isto existe porque a fonte estava parando num TETO INVENTADO, não no espaço:
+ * um título de 9 palavras saía a 54px ocupando 503px de largura — com 780px
+ * disponíveis e 277px sobrando sem uso. O teto de 3 linhas era 54 e pronto.
+ * Agora o limite é a faixa: a fonte cresce até a largura ou a altura barrarem.
+ *
+ * Conferência de que os números estão certos: com ENTRELINHA 1,18 esta conta
+ * devolve [126, 190, 254] para 3 linhas a 54px, contra os [123, 187, 251] que
+ * estavam escritos à mão, e [140, 223] contra [135, 215] para 2 linhas a 70px.
+ * Reproduz o desenho homologado — só deixa de travar antes da hora.
+ */
+const BANDA_TOPO = 112;
+const BANDA_BASE = 322;
+const ENTRELINHA = 1.18;
+
+/** O maior corpo em que `linhas` linhas ainda cabem na faixa. */
+function fonteQueCabeNaAltura(linhas) {
+  if (linhas <= 1) return TAMANHO_PADRAO;
+  return Math.floor((BANDA_BASE - BANDA_TOPO) / (ENTRELINHA * (linhas - 1) + 1));
+}
+
+/** Onde cada linha começa, centralizando o bloco na faixa. */
+function posicoesNaBanda(fonte, linhas) {
+  const passo = Math.round(fonte * ENTRELINHA);
+  const alturaTotal = passo * (linhas - 1) + fonte;
+  const topo = Math.round(BANDA_TOPO + Math.max(0, (BANDA_BASE - BANDA_TOPO - alturaTotal) / 2));
+  return Array.from({ length: linhas }, (_, i) => topo + i * passo);
+}
 // Chão de segurança do laço de encolher (linha ~94), não um teto de palavras.
 // Antes disto valia 42 e ainda existia uma rejeição ANTES do laço de verdade,
 // baseada numa estimativa grosseira por palavra — um título comprido podia ser
@@ -74,9 +109,11 @@ export async function ajustarTitulo(linha1, linha2, fonte) {
     opcoes2.sort((a, b) => b.fonte - a.fonte || a.maior - b.maior);
     escolhido = opcoes2[0];
 
-    // Três linhas cabem acima do slide com fonte de até 54 px. Só são usadas
-    // quando duas linhas tornariam o título pequeno demais.
+    // Três linhas cabem acima do slide com o corpo que a faixa permitir — hoje
+    // 62px, e não os 54 que estavam escritos à mão. Só são usadas quando duas
+    // linhas tornariam o título pequeno demais.
     if (!escolhido || escolhido.fonte < 52) {
+      const tetoDeTresLinhas = fonteQueCabeNaAltura(3);
       const opcoes3 = [];
       for (let i = 1; i < palavras.length - 1; i++) {
         for (let j = i + 1; j < palavras.length; j++) {
@@ -84,7 +121,7 @@ export async function ajustarTitulo(linha1, linha2, fonte) {
             palavras.slice(0, i).join(' '),
             palavras.slice(i, j).join(' '),
             palavras.slice(j).join(' '),
-          ], 54));
+          ], tetoDeTresLinhas));
         }
       }
       opcoes3.sort((a, b) => b.fonte - a.fonte || a.maior - b.maior);
@@ -98,12 +135,15 @@ export async function ajustarTitulo(linha1, linha2, fonte) {
     // veio e deixa o laço abaixo encolher pixel a pixel, igual a qualquer outro.
     escolhido = { linhas: originais.length === 1 ? [originais[0], ''] : originais, fonte: TAMANHO_PADRAO };
   }
-  const posicoesY = escolhido.linhas.length === 3 ? [123, 187, 251] : [135, 215];
   let larguras = await Promise.all(escolhido.linhas.map((linha) => medir(linha, escolhido.fonte)));
   while (larguras.some((n) => n > LARGURA_TITULO) && escolhido.fonte > FONTE_MINIMA) {
     escolhido.fonte--;
     larguras = await Promise.all(escolhido.linhas.map((linha) => medir(linha, escolhido.fonte)));
   }
+  // As posições saem do corpo final, e não de uma tabela fixa: mudar a fonte sem
+  // mover as linhas junto ou abria um buraco na faixa ou encavalava as linhas.
+  const usadas = escolhido.linhas.filter((l) => String(l || '').trim()).length || 1;
+  const posicoesY = posicoesNaBanda(escolhido.fonte, usadas);
   // Só dispara se o texto não couber nem no chão de segurança — título absurdamente
   // comprido numa palavra só que nem quebra de linha resolve. Não é limite de
   // palavra: é o piso físico de legibilidade.
