@@ -6,6 +6,7 @@
 
 ## Design Visual
 
+- **Capa do Reel (9:16) e miniatura do YouTube (16:9) são formatos IRMÃOS, não o mesmo formato.** A capa vive em `render-reel-cover.mjs`, a miniatura em `render-youtube-thumbnail.mjs` — scripts separados, mesma paleta por curso, mesma regra de não truncar gancho por contagem de palavra (2026-09-26).
 - As capas dos Reels devem ser artes dedicadas em 1080 x 1920, nunca quadros completos extraídos do vídeo.
 - Manter logo, curso, episódio, gancho e rosto dentro da área segura x=55 a 1025 e y=250 a 1660; gancho e rosto também devem funcionar no recorte central y=420 a 1500.
 - Não comprimir a composição no centro nem usar faixas azuis altas no topo e no rodapé. White Belt deve parecer predominantemente branco, com conteúdo grande.

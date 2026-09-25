@@ -34,6 +34,31 @@ Isso inclui logo, nome da empresa, curso, episódio, gancho e rosto. O gancho e 
 
 Neste momento, o modelo homologado para produção é o White Belt. Os outros estilos estão registrados para desenvolvimento posterior.
 
+## Miniatura 16:9 do YouTube (vídeo longo)
+
+Formato irmão, não o mesmo formato: `automation/render-youtube-thumbnail.mjs` gera
+1280x720 para vídeo longo publicado como vídeo normal do YouTube — diferente da
+capa 9:16 acima, que é do Short/Reel. Reaproveita a mesma paleta por curso e a
+mesma regra de nunca truncar por contagem de palavra, só encolher até caber.
+
+Uso:
+
+```
+node render-youtube-thumbnail.mjs --config config.json --portrait retrato.png --output capa.jpg
+```
+
+```json
+"thumb": {
+  "courseKey": "white-belt",
+  "seriesLabel": "WHITE BELT",
+  "episode": "PARTE 1",
+  "hookLines": ["GANCHO", "SEM LIMITE DE PALAVRA"]
+}
+```
+
+O retrato fica à direita (a duração do vídeo sobrepõe o canto inferior direito
+no YouTube; o texto à esquerda nunca é coberto). Teste: `teste-thumbnail-youtube.mjs`.
+
 As pastas dos vídeos White Belt usam o formato `AAAA-MM-DD__Videos WB - NN-tema`. A identificação do episódio na capa é independente do número histórico da pasta.
 
 ## Configuração obrigatória
