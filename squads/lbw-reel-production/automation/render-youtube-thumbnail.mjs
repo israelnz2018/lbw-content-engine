@@ -116,14 +116,52 @@ async function ajustarGancho(pagina) {
     const linhas = [...gancho.querySelectorAll('.line')];
     if (!linhas.length) return null;
 
-    const cabe = () => gancho.scrollWidth <= gancho.clientWidth + 1 && gancho.scrollHeight <= 420;
-    let tamanho = 82;
-    while (!cabe() && tamanho > 24) {
+    // O PISO É 60px, e ele é uma medida, não um gosto.
+    //
+    // Aqui a regra é o INVERSO da capa do Reel. Lá, encolher até caber está
+    // certo: a capa do Reel é vista grande, ocupando a tela do Instagram. A
+    // miniatura do YouTube é vista a 168px de largura na lista de sugeridos —
+    // foi medido: um gancho de 13 palavras encolhido para caber virou um borrão
+    // ilegível nesse tamanho, enquanto o rosto continuou reconhecível.
+    //
+    // Então abaixo de 60px o problema não é a fonte ser grande, é o texto ser
+    // comprido. Quem corrige é quem escreveu o gancho (Mary Moon), reescrevendo
+    // mais curto — não o desenho, fingindo que caber é a mesma coisa que ler.
+    // DUAS travas, porque a fonte sozinha não segura.
+    //
+    // Um gancho de 13 palavras CABE a 70px — em cinco linhas. Cabe e não se lê:
+    // cinco linhas viram cinco riscos a 168px. Então o limite é o par
+    // (corpo mínimo, linhas máximas), e não só o corpo.
+    const PISO = 60;
+    const MAX_LINHAS = 3;
+    // line-height é .95; três linhas ocupam 3 x .95 x corpo, com uma folga de
+    // 6px para o arredondamento do navegador.
+    const alturaDe = (corpo) => Math.ceil(MAX_LINHAS * 0.95 * corpo) + 6;
+
+    let tamanho = 92;
+    const cabe = () => gancho.scrollWidth <= gancho.clientWidth + 1
+      && gancho.scrollHeight <= alturaDe(tamanho);
+    linhas.forEach((l) => { l.style.fontSize = `${tamanho}px`; });
+    while (!cabe() && tamanho > PISO) {
       tamanho -= 2;
       linhas.forEach((l) => { l.style.fontSize = `${tamanho}px`; });
     }
-    if (!cabe()) throw new Error('O gancho não coube na miniatura mesmo na fonte mínima. Encurte o texto.');
-    return { fonte: tamanho, texto: linhas.map((l) => l.textContent).join(' ') };
+    if (!cabe()) {
+      const texto = linhas.map((l) => l.textContent).join(' ').trim();
+      const palavras = texto.split(/\s+/).filter(Boolean).length;
+      const usadas = Math.round(gancho.scrollHeight / (0.95 * tamanho));
+      throw new Error(
+        `O gancho tem ${palavras} palavras e ocupa ${usadas} linhas a ${PISO}px — o limite é `
+        + `${MAX_LINHAS} linhas, e ${PISO}px é o menor corpo que ainda se lê quando o YouTube `
+        + 'mostra a miniatura a 168px de largura. Encurte para no máximo 6 palavras: '
+        + 'encolher mais deixaria a capa completa e ilegível.',
+      );
+    }
+    return {
+      fonte: tamanho,
+      linhas: Math.round(gancho.scrollHeight / (0.95 * tamanho)),
+      texto: linhas.map((l) => l.textContent).join(' '),
+    };
   });
 }
 
