@@ -33,6 +33,7 @@ const raizProjeto = path.resolve(scriptDir, '..', '..', '..');
 const configPath = process.argv[2] ? path.resolve(process.argv[2]) : null;
 if (!configPath || !fs.existsSync(configPath)) throw new Error('Informe um arquivo JSON de configuração existente.');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const TIKTOK_CLEAN = config.tiktokClean === true;
 
 /* ── Fonte de texto ────────────────────────────────────────── */
 
@@ -130,9 +131,8 @@ function resolverEntrada(valor, rotulo) {
 }
 
 const fonteVideo = resolverEntrada(config.sourceVideo, 'Vídeo-fonte');
-const logo = resolverEntrada(
-  config.logoPath || path.join(raizProjeto, 'assets/marca/logo-lbw-branca.png'),
-  'Logo oficial',
+const logo = TIKTOK_CLEAN ? null : resolverEntrada(
+  config.logoPath || path.join(raizProjeto, 'assets/marca/logo-lbw-branca.png'), 'Logo oficial',
 );
 const legendaAss = resolverEntrada(config.captionsAss, 'Legenda ASS');
 
@@ -207,12 +207,15 @@ const filtro = [
   `[canvas][top]overlay=${L.slideX}:${L.slideY}[tmp1]`,
   `[tmp1]drawbox=x=${L.coverX}:y=${L.coverY}:w=${L.coverWidth}:h=${L.coverHeight}:color=${L.coverColor}:t=fill,drawbox=x=${L.slideX}:y=${L.slideBarY}:w=${L.slideWidth}:h=${L.slideBarHeight}:color=0x202D70:t=fill[tmpclean]`,
   `[tmpclean][face]overlay=${L.faceX}:${L.faceY}[tmp2]`,
-  `[tmp2]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head]`,
-  `[1:v]scale=60:60[logo]`,
-  `[head][logo]overlay=40:20[branded]`,
-  `[branded]drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoMarca)}':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,`
-  + `${filtrosTitulo},`
-  + `subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`,
+  ...(TIKTOK_CLEAN
+    ? [`[tmp2]${filtrosTitulo},subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`]
+    : [
+      `[tmp2]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head]`,
+      `[1:v]scale=60:60[logo]`,
+      `[head][logo]overlay=40:20[branded]`,
+      `[branded]drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoMarca)}':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,`
+        + `${filtrosTitulo},subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`,
+    ]),
 ].join(';\n');
 
 /* ── Render ────────────────────────────────────────────────── */
@@ -228,7 +231,7 @@ const argumentos = [
   '-y', '-hide_banner', '-loglevel', 'error',
   ...(cabecalhos ? ['-headers', cabecalhos] : []),
   '-ss', paraTempoFfmpeg(inicioMs), '-t', String(duracaoSegundos), '-i', fonteVideo,
-  '-loop', '1', '-i', logo,
+  ...(logo ? ['-loop', '1', '-i', logo] : []),
   '-filter_complex', filtro,
   '-map', '[outv]', '-map', '0:a:0?',
   '-t', String(duracaoSaidaSegundos),

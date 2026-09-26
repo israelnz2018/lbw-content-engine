@@ -9,7 +9,15 @@
  * FASE 1: só o consultor 'israel'. Cada consultor precisa do próprio token, e
  * hoje só existe um par de tokens (no Railway). Ver CONSULTORES_COM_PUBLICACAO.
  */
-import { bucket, db, lerPeca, lerCampanha, lerCriativo } from './firestore.mjs';
+import { bucket, db, lerPeca, lerCampanha, lerCriativo, COLECOES } from './firestore.mjs';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const IG_BASE = 'https://graph.facebook.com/v21.0';
 const LI_BASE = 'https://api.linkedin.com/rest';
@@ -73,7 +81,65 @@ export function deveCruzarParaYoutube(tipo) {
  * estiver funcionando e aprovado. Não é limitação técnica, é fatiar o trabalho.
  */
 export function deveCruzarParaTiktok(tipo) {
-  return tipo === 'reel' || tipo === 'carrossel-video';
+  return tipo === 'reel' || tipo === 'carrossel-video' || tipo === 'carrossel-feed';
+}
+
+/** Formata os blocos respeitando a regra do TikTok: floor(video_size/chunk_size). */
+export function blocosDeUploadTiktok(tamanho) {
+  const bytes = Number(tamanho);
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) throw new Error('O arquivo do TikTok está vazio ou tem tamanho inválido.');
+  const maximo = 64 * 1024 * 1024;
+  const quantidadeBase = Math.ceil(bytes / maximo);
+  const tamanhoBloco = quantidadeBase === 1 ? bytes : Math.floor(bytes / quantidadeBase);
+  const quantidade = Math.floor(bytes / tamanhoBloco);
+  const blocos = [];
+  for (let inicio = 0, indice = 0; indice < quantidade; indice++) {
+    const fimExclusivo = indice === quantidade - 1 ? bytes : inicio + tamanhoBloco;
+    blocos.push({ inicio, fim: fimExclusivo - 1, tamanho: fimExclusivo - inicio });
+    inicio = fimExclusivo;
+  }
+  if (blocos.some((bloco, indice) => {
+    const limite = (indice === blocos.length - 1 ? 128 : 64) * 1024 * 1024;
+    return bloco.tamanho > limite || (bytes >= 5 * 1024 * 1024 && bloco.tamanho < 5 * 1024 * 1024);
+  })) throw new Error('Não consegui dividir o vídeo em blocos aceitos pelo TikTok.');
+  return { tamanhoBloco, quantidade, blocos };
+}
+
+/** Unaudited/Sandbox apps must never request a public TikTok post. */
+export function escolherPrivacidadeTiktok(opcoes, { auditada = false, solicitada } = {}) {
+  const escolhida = auditada ? (solicitada || 'PUBLIC_TO_EVERYONE') : 'SELF_ONLY';
+  if (!Array.isArray(opcoes) || !opcoes.includes(escolhida)) {
+    throw new Error(`A privacidade '${escolhida}' não está disponível para esta conta TikTok.`);
+  }
+  return escolhida;
+}
+
+function segredoDeMidiaTiktok() {
+  const configurado = valorDeAmbiente('TIKTOK_MEDIA_SIGNING_SECRET');
+  if (configurado) return configurado;
+  const bruto = process.env.FIREBASE_ADMIN_KEY_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!bruto) throw new Error('Configure TIKTOK_MEDIA_SIGNING_SECRET no servidor e no worker.');
+  const chavePrivada = JSON.parse(bruto).private_key;
+  if (!chavePrivada) throw new Error('A credencial Firebase não tem private_key para assinar as imagens TikTok.');
+  // Deriva uma chave só para mídia TikTok; não reutiliza a chave do Firebase.
+  return crypto.createHmac('sha256', chavePrivada).update('lbw:tiktok:media-url:v1').digest('hex');
+}
+
+export function assinarUrlDeMidiaTiktok(storagePath, segredo, expiraEm) {
+  if (!String(storagePath).startsWith('marketing/') || String(storagePath).includes('..')) {
+    throw new Error('Caminho de mídia TikTok inválido.');
+  }
+  const payload = Buffer.from(JSON.stringify({ path: storagePath, exp: expiraEm })).toString('base64url');
+  const assinatura = crypto.createHmac('sha256', segredo).update(payload).digest('base64url');
+  return `${payload}.${assinatura}`;
+}
+
+function urlPublicaDeMidiaTiktok(storagePath, segredo = segredoDeMidiaTiktok()) {
+  const base = valorDeAmbiente('TIKTOK_MEDIA_BASE_URL')
+    || valorDeAmbiente('APP_URL')
+    || 'https://app.educacaopelotrabalho.com';
+  const token = assinarUrlDeMidiaTiktok(storagePath, segredoDeMidiaTiktok(), Math.floor(Date.now() / 1000) + 6 * 60 * 60);
+  return `${base.replace(/\/$/, '')}/api/tiktok/media/${token}`;
 }
 
 /**
@@ -268,6 +334,38 @@ export async function enderecoPublico(caminho) {
 async function baixarBytes(caminho) {
   const [buffer] = await bucket().file(caminho).download();
   return buffer;
+}
+
+async function arquivoVideoTikTok(peca) {
+  const caminho = peca.tiktokVideoUrl || videoDaPeca(peca);
+  if (!caminho) throw new Error('Peça sem vídeo para o TikTok.');
+  const original = await baixarBytes(caminho);
+  if (peca.tiktokVideoUrl) return original;
+  if (peca.origem === 'enviada') {
+    throw new Error('Este vídeo enviado manualmente não tem uma versão TikTok sem marca; use um arquivo original sem sobreposição.');
+  }
+
+  // Peças antigas ainda não têm a cópia limpa criada no render. Removemos a
+  // faixa LBW já conhecida do renderizador; o arquivo guardado para Instagram,
+  // Facebook e YouTube permanece intacto.
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lbw-tiktok-clean-'));
+  try {
+    const entrada = path.join(temp, 'entrada.mp4');
+    const saida = path.join(temp, 'sem-marca.mp4');
+    fs.writeFileSync(entrada, original);
+    const filtro = peca.tipo === 'carrossel-video'
+      ? 'crop=iw:ih-224:0:96,pad=iw:ih+224:0:96:color=0xF3F7FC'
+      : 'crop=iw:ih-105:0:105,pad=iw:ih+105:0:105:color=0xF3F7FC';
+    await execFileAsync('ffmpeg', [
+      '-y', '-hide_banner', '-loglevel', 'error', '-i', entrada,
+      '-vf', filtro, '-map', '0:v:0', '-map', '0:a?',
+      '-c:v', 'libx264', '-preset', 'fast', '-crf', '21', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', saida,
+    ], { timeout: 5 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 });
+    return fs.readFileSync(saida);
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
 }
 
 /* ===================== Instagram ===================== */
@@ -647,13 +745,13 @@ async function credenciaisTiktok(consultorId) {
 
   const doAmbiente = valorDeAmbiente('TIKTOK_REFRESH_TOKEN');
   if (doAmbiente && String(consultorId || '').toLowerCase() === 'israel') {
-    return { clientKey, clientSecret, refreshToken: doAmbiente };
+    return { clientKey, clientSecret, refreshToken: doAmbiente, consultorId: 'israel' };
   }
 
   try {
     const snap = await db().collection('tiktok_consultores').doc(String(consultorId || '')).get();
     const refreshToken = String(snap.exists ? (snap.data()?.refreshToken || '') : '').trim();
-    return refreshToken ? { clientKey, clientSecret, refreshToken } : null;
+    return refreshToken ? { clientKey, clientSecret, refreshToken, consultorId: String(consultorId || '') } : null;
   } catch {
     // Sem acesso ao banco, o cruzamento fica desligado — nunca derruba o
     // Instagram por causa de um bônus.
@@ -662,7 +760,7 @@ async function credenciaisTiktok(consultorId) {
 }
 
 /** Mesmo desenho do YouTube: o refresh token não vence, o access token vence em horas. */
-async function tokenDeAcessoTiktok({ clientKey, clientSecret, refreshToken }) {
+async function tokenDeAcessoTiktok({ clientKey, clientSecret, refreshToken, consultorId }) {
   const res = await fetch(`${TT_BASE}/oauth/token/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
@@ -675,7 +773,65 @@ async function tokenDeAcessoTiktok({ clientKey, clientSecret, refreshToken }) {
   if (!res.ok) throw new Error(`TikTok recusou renovar o acesso (${res.status}): ${texto.slice(0, 400)}`);
   const dados = JSON.parse(texto);
   if (!dados.access_token) throw new Error(`TikTok não devolveu access_token: ${texto.slice(0, 400)}`);
+  // O TikTok pode rotacionar o refresh token. Guardar o novo evita que o próximo
+  // agendamento volte a tentar renovar com um token já invalidado.
+  if (dados.refresh_token && consultorId) {
+    await db().collection('tiktok_consultores').doc(String(consultorId)).set({
+      refreshToken: dados.refresh_token,
+      refreshExpiraEm: new Date(Date.now() + Number(dados.refresh_expires_in || 31536000) * 1000).toISOString(),
+      tokenAtualizadoEm: new Date().toISOString(),
+    }, { merge: true });
+  }
   return dados.access_token;
+}
+
+async function consultarCriadorTiktok(token) {
+  const res = await fetch(`${TT_BASE}/post/publish/creator_info/query/`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8' },
+  });
+  const texto = await res.text();
+  if (!res.ok) throw new Error(`TikTok recusou consultar a conta (${res.status}): ${texto.slice(0, 400)}`);
+  const resposta = JSON.parse(texto);
+  if (resposta.error?.code && resposta.error.code !== 'ok') {
+    throw new Error(`TikTok não confirmou os dados da conta: ${resposta.error.code} ${resposta.error.message || ''}`.trim());
+  }
+  if (!resposta.data?.privacy_level_options?.length) throw new Error('TikTok não devolveu as opções de privacidade da conta.');
+  return resposta.data;
+}
+
+async function publicarCarrosselFotosTiktok(peca, legenda, token, criador, privacidade) {
+  const slides = Array.isArray(peca.tiktokSlides) ? peca.tiktokSlides : [];
+  if (slides.length < 2 || slides.length > 35) {
+    throw new Error('A versão limpa do carrossel TikTok precisa ter de 2 a 35 imagens. Gere novamente este carrossel.');
+  }
+  const segredo = segredoDeMidiaTiktok();
+  const urls = slides.map((slide) => urlPublicaDeMidiaTiktok(slide, segredo));
+  const res = await fetch(`${TT_BASE}/post/publish/content/init/`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({
+      post_info: {
+        description: limitarLegenda(legenda, 4000),
+        privacy_level: privacidade,
+        disable_comment: true,
+        brand_organic_toggle: peca.tiktokPromoteOwnBrand === true,
+        brand_content_toggle: peca.tiktokBrandedContent === true,
+      },
+      source_info: { source: 'PULL_FROM_URL', photo_images: urls, photo_cover_index: 0 },
+      post_mode: 'DIRECT_POST',
+      media_type: 'PHOTO',
+    }),
+  });
+  const texto = await res.text();
+  if (!res.ok) throw new Error(`TikTok recusou o carrossel (${res.status}): ${texto.slice(0, 500)}`);
+  const dados = JSON.parse(texto);
+  if (dados.error?.code && dados.error.code !== 'ok') {
+    throw new Error(`TikTok recusou o carrossel: ${dados.error.code} ${dados.error.message || ''}`.trim());
+  }
+  const publishId = dados.data?.publish_id;
+  if (!publishId) throw new Error(`TikTok não devolveu publish_id para o carrossel: ${texto.slice(0, 400)}`);
+  return { postId: publishId, link: null, status: 'processando', creatorUsername: criador.creator_username || null };
 }
 
 /**
@@ -688,12 +844,26 @@ async function tokenDeAcessoTiktok({ clientKey, clientSecret, refreshToken }) {
  */
 async function publicarNoTiktok(peca, legenda, credenciais) {
   const token = await tokenDeAcessoTiktok(credenciais);
-  const caminho = videoDaPeca(peca);
-  if (!caminho) throw new Error('Peça sem vídeo — não há o que enviar ao TikTok.');
-  const bytes = await baixarBytes(caminho);
+  const criador = await consultarCriadorTiktok(token);
+  const bytes = await arquivoVideoTikTok(peca);
 
-  const privacidade = valorDeAmbiente('TIKTOK_PRIVACY_LEVEL') || 'PUBLIC_TO_EVERYONE';
+  // A variável da auditoria só pode ser ligada depois da aprovação do app;
+  // Sandbox e apps ainda não auditados são sempre SELF_ONLY.
+  const privacidade = escolherPrivacidadeTiktok(criador.privacy_level_options, {
+    auditada: valorDeAmbiente('TIKTOK_CLIENT_AUDITED') === 'true',
+    solicitada: peca.tiktokPrivacyLevel || valorDeAmbiente('TIKTOK_PRIVACY_LEVEL'),
+  });
+  if (peca.tiktokBrandedContent === true && privacidade === 'SELF_ONLY') {
+    throw new Error('O TikTok não permite conteúdo patrocinado de terceiros com visibilidade “Somente você”. Escolha outra privacidade após a auditoria.');
+  }
+  if (peca.tipo === 'carrossel-feed') {
+    return publicarCarrosselFotosTiktok(peca, legenda, token, criador, privacidade);
+  }
+  if (peca.tiktokMusicUsageConfirmed !== true) {
+    throw new Error('Confirme na etapa Publicação que você tem direito de usar o áudio e aceita a confirmação de música do TikTok.');
+  }
   const titulo = limitarLegenda(legenda, 2200);
+  const blocos = blocosDeUploadTiktok(bytes.length);
 
   const iniciar = await fetch(`${TT_BASE}/post/publish/video/init/`, {
     method: 'POST',
@@ -702,10 +872,16 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
       'Content-Type': 'application/json; charset=UTF-8',
     },
     body: JSON.stringify({
-      post_info: { title: titulo, privacy_level: privacidade, disable_duet: false, disable_stitch: false, disable_comment: false },
-      // Um chunk só: os cortes têm segundos de duração, nada perto do teto de
-      // 64 MB por chunk que a API aceita antes de exigir dividir o envio.
-      source_info: { source: 'FILE_UPLOAD', video_size: bytes.length, chunk_size: bytes.length, total_chunk_count: 1 },
+      post_info: {
+        title: titulo, privacy_level: privacidade,
+        disable_duet: true, disable_stitch: true, disable_comment: true,
+        brand_organic_toggle: peca.tiktokPromoteOwnBrand === true,
+        brand_content_toggle: peca.tiktokBrandedContent === true,
+      },
+      source_info: {
+        source: 'FILE_UPLOAD', video_size: bytes.length,
+        chunk_size: blocos.tamanhoBloco, total_chunk_count: blocos.quantidade,
+      },
     }),
   });
   const corpoInicio = await iniciar.text();
@@ -715,35 +891,96 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
   const publishId = dadosInicio?.data?.publish_id;
   if (!uploadUrl || !publishId) throw new Error(`TikTok não devolveu endereço de envio nem publish_id: ${corpoInicio.slice(0, 400)}`);
 
-  const envio = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'video/mp4',
-      'Content-Range': `bytes 0-${bytes.length - 1}/${bytes.length}`,
-    },
-    body: bytes,
-  });
-  if (!envio.ok) throw new Error(`TikTok recusou o vídeo (${envio.status}): ${(await envio.text()).slice(0, 400)}`);
+  for (const bloco of blocos.blocos) {
+    const envio = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'video/mp4',
+        'Content-Length': String(bloco.tamanho),
+        'Content-Range': `bytes ${bloco.inicio}-${bloco.fim}/${bytes.length}`,
+      },
+      body: bytes.subarray(bloco.inicio, bloco.fim + 1),
+    });
+    if (!envio.ok) throw new Error(`TikTok recusou o bloco do vídeo (${envio.status}): ${(await envio.text()).slice(0, 400)}`);
+  }
 
   // A publicação em si é ASSÍNCRONA do lado do TikTok: o envio ter dado certo
   // não significa que o post já está no ar — só que entrou na fila deles. Sem
   // um endereço de post para devolver na hora, o link fica pendente por ora.
-  return { postId: publishId, link: null };
+  return { postId: publishId, link: null, status: 'processando', creatorUsername: criador.creator_username || null };
 }
 
 /** Mesma forma do YouTube e do Facebook: silencioso sem credencial, nunca derruba o Instagram. */
 export async function cruzarParaTiktokSeConfigurado(peca, legenda) {
   if (peca.publicarNoTiktok !== true) return null;
-  if (!deveCruzarParaTiktok(peca.tipo)) return null;
+  if (!deveCruzarParaTiktok(peca.tipo)) {
+    return { status: 'falhou', erro: `O formato '${peca.tipo}' ainda não está integrado ao TikTok.` };
+  }
   const credenciais = await credenciaisTiktok(peca.consultorId);
-  if (!credenciais) return null;
+  if (!credenciais) {
+    return { status: 'falhou', erro: 'TikTok não conectado ou faltam as credenciais do aplicativo no servidor.' };
+  }
 
   try {
-    const { postId, link } = await publicarNoTiktok(peca, legenda, credenciais);
-    return { status: 'publicada', postId, link, publicadoEm: new Date().toISOString(), erro: null };
+    const { postId, link, status, creatorUsername } = await publicarNoTiktok(peca, legenda, credenciais);
+    return { status, postId, link, creatorUsername, enviadoEm: new Date().toISOString(), erro: null };
   } catch (e) {
     return { status: 'falhou', erro: String(e?.message || e).slice(0, 500) };
   }
+}
+
+/** Atualiza somente o estado TikTok de posts já enviados; não mexe na rede principal. */
+export async function verificarPublicacoesTiktok() {
+  const snap = await db().collection(COLECOES.pecas)
+    .where('publicacao.tiktok.status', '==', 'processando')
+    .limit(20)
+    .get();
+  let atualizadas = 0;
+  for (const doc of snap.docs) {
+    const peca = { id: doc.id, ...doc.data() };
+    const jobId = peca.publicacao?.tiktok?.postId;
+    if (!jobId) continue;
+    try {
+      const credenciais = await credenciaisTiktok(peca.consultorId);
+      if (!credenciais) continue;
+      const token = await tokenDeAcessoTiktok(credenciais);
+      const res = await fetch(`${TT_BASE}/post/publish/status/fetch/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify({ publish_id: jobId }),
+      });
+      const corpo = await res.text();
+      if (!res.ok) throw new Error(`TikTok status (${res.status}): ${corpo.slice(0, 300)}`);
+      const resposta = JSON.parse(corpo);
+      if (resposta.error?.code && resposta.error.code !== 'ok') {
+        throw new Error(`TikTok status: ${resposta.error.code} ${resposta.error.message || ''}`.trim());
+      }
+      const estado = resposta.data?.status;
+      if (estado === 'PUBLISH_COMPLETE') {
+        const postReal = resposta.data?.publicaly_available_post_id?.[0];
+        await doc.ref.update({
+          'publicacao.tiktok.status': 'publicada',
+          'publicacao.tiktok.publicadoEm': new Date().toISOString(),
+          'publicacao.tiktok.link': postReal && peca.publicacao?.tiktok?.creatorUsername
+            ? `https://www.tiktok.com/@${peca.publicacao.tiktok.creatorUsername}/video/${postReal}` : null,
+          'publicacao.tiktok.erro': null,
+        });
+        atualizadas++;
+      } else if (estado === 'FAILED') {
+        await doc.ref.update({
+          'publicacao.tiktok.status': 'falhou',
+          'publicacao.tiktok.erro': String(resposta.data?.fail_reason || 'O TikTok recusou a publicação.').slice(0, 500),
+          'publicacao.tiktok.falhouEm': new Date().toISOString(),
+        });
+        atualizadas++;
+      }
+    } catch (e) {
+      // Erros transitórios de consulta não mudam o estado do post e não afetam
+      // a fila nem qualquer uma das outras redes.
+      console.warn(`[TikTok] Não consegui consultar o status de ${peca.id}: ${String(e?.message || e).slice(0, 250)}`);
+    }
+  }
+  return { consultadas: snap.size, atualizadas };
 }
 
 /* ===================== LinkedIn ===================== */

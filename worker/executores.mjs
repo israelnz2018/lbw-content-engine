@@ -12,7 +12,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { enviarPasta } from './storage.mjs';
+import { enviarPasta, enviarArquivo } from './storage.mjs';
 import {
   gravarPeca, atualizarCampanha, lerCampanha, lerCriativo, lerPeca, tarefaCancelada,
 } from './firestore.mjs';
@@ -182,8 +182,49 @@ export async function gerarCampanha(tarefa) {
     fs.writeFileSync(configPath, JSON.stringify(renderConfig, null, 2), 'utf8');
 
     const resultado = await rodarRenderizador(RENDERIZADORES.carrossel, configPath);
+    const versaoDaProducao = Date.now();
     const porPagina = imagensPorPagina(resultado?.pessoas, usos);
     await registrarUso(porPagina).catch((e) => console.warn(`aviso: uso das imagens não registrado (${e.message})`));
+
+    // Cópia TikTok do mesmo roteiro e das mesmas imagens, mas sem o cabeçalho
+    // e a assinatura LBW adicionados pelo renderizador normal. As peças originais
+    // e os arquivos das outras redes não são alterados.
+    let arquivosTiktok = [];
+    let videoTiktok = null;
+    try {
+      const configTiktok = {
+        ...renderConfig,
+        outputRoot: path.join(temp, 'tiktok-clean'),
+        tiktokClean: true,
+        video: renderConfig.video?.enabled === false ? { enabled: false } : renderConfig.video,
+      };
+      const configTiktokPath = path.join(temp, 'config-tiktok.json');
+      fs.writeFileSync(configTiktokPath, JSON.stringify(configTiktok, null, 2), 'utf8');
+      const resultadoTiktok = await rodarRenderizador(RENDERIZADORES.carrossel, configTiktokPath);
+      const pastaJpegsTiktok = path.join(temp, 'tiktok-jpeg');
+      fs.mkdirSync(pastaJpegsTiktok, { recursive: true });
+      for (const [indice, png] of (resultadoTiktok?.pngPaths || []).entries()) {
+        const jpeg = path.join(pastaJpegsTiktok, `slide-${String(indice + 1).padStart(2, '0')}.jpg`);
+        await execFileAsync('ffmpeg', [
+          '-y', '-hide_banner', '-loglevel', 'error', '-i', png,
+          '-vf', 'scale=-2:1080', '-q:v', '2', jpeg,
+        ], { timeout: 60 * 1000 });
+      }
+      arquivosTiktok = await enviarPasta(pastaJpegsTiktok, {
+        consultorId, campanhaId, tipo: `tiktok/v${versaoDaProducao}`,
+      });
+      if (resultadoTiktok?.videoPath && fs.existsSync(resultadoTiktok.videoPath)) {
+        videoTiktok = await enviarArquivo(resultadoTiktok.videoPath, {
+          consultorId, campanhaId, tipo: `tiktok/v${versaoDaProducao}`,
+        });
+      }
+    } catch (erroTiktok) {
+      // A variante TikTok é opcional: uma falha dela nunca interrompe as peças
+      // originais de Instagram, Facebook, YouTube ou LinkedIn.
+      console.warn(`aviso: não consegui preparar a cópia TikTok (${String(erroTiktok?.message || erroTiktok).slice(0, 250)})`);
+      arquivosTiktok = [];
+      videoTiktok = null;
+    }
 
     // CADA PRODUÇÃO VAI PARA UMA PASTA NOVA.
     //
@@ -196,7 +237,6 @@ export async function gerarCampanha(tarefa) {
     //
     // O carimbo de tempo no caminho resolve sem depender de cabeçalho de cache nem
     // de o consultor saber dar refresh forçado.
-    const versaoDaProducao = Date.now();
     const pecas = [];
     let paginasFeed = [];
     for (const tipo of ['FEED', 'REELS', 'LINKEDIN']) {
@@ -237,6 +277,8 @@ export async function gerarCampanha(tarefa) {
           // "legenda.md" vem antes de "slide-01.png" e virava a miniatura.
           arquivoUrl: arquivoPrincipal,
           arquivos: arquivosDaPeca,
+          ...(tipo === 'FEED' && arquivosTiktok.length ? { tiktokSlides: arquivosTiktok } : {}),
+          ...(tipo === 'REELS' && videoTiktok ? { tiktokVideoUrl: videoTiktok } : {}),
           // Guardamos o roteiro original, com os ids da biblioteca. `render`
           // contém URLs temporárias usadas apenas durante esta execução.
           roteiro: tarefa.render?.slides || [],
@@ -527,6 +569,28 @@ export async function gerarReel(tarefa) {
     }, null, 2), 'utf8');
 
     const resultado = await rodarRenderizador(RENDERIZADORES.reel, configPath);
+    let caminhoReelTiktokLocal = null;
+    try {
+      // Mesmo corte, fonte e legendas; só não coloca o cabeçalho LBW no vídeo
+      // que será entregue à API do TikTok. Mantém o arquivo original intacto.
+      const pastaTiktok = path.join(temp, 'saida-tiktok');
+      const configTiktokPath = path.join(temp, 'config-tiktok.json');
+      fs.writeFileSync(configTiktokPath, JSON.stringify({
+        ...render,
+        captionsAss: legendaAss,
+        cover: null,
+        tiktokClean: true,
+        outputPath: path.join(pastaTiktok, 'reel-tiktok.mp4'),
+        workDir: path.join(temp, 'trabalho-tiktok'),
+      }, null, 2), 'utf8');
+      await rodarRenderizador(RENDERIZADORES.reel, configTiktokPath);
+      const candidato = path.join(pastaTiktok, 'reel-tiktok.mp4');
+      if (fs.existsSync(candidato)) caminhoReelTiktokLocal = candidato;
+      else throw new Error('O renderizador não gerou a cópia limpa do TikTok.');
+    } catch (erroTiktok) {
+      // A cópia extra é opcional e nunca deve impedir a geração do Reel principal.
+      console.warn(`aviso: não consegui preparar a cópia TikTok do Reel (${String(erroTiktok?.message || erroTiktok).slice(0, 250)})`);
+    }
 
     if (await tarefaCancelada(tarefa.id)) {
       await atualizarCampanha(campanhaId, {
@@ -539,6 +603,9 @@ export async function gerarReel(tarefa) {
     // que vira a miniatura no Instagram.
     const caminhos = await enviarPasta(saidaDir, { consultorId, campanhaId, tipo: 'reel' });
     if (!caminhos.length) throw new Error('O Reel não produziu arquivo nenhum.');
+    const caminhoReelTiktok = caminhoReelTiktokLocal
+      ? await enviarArquivo(caminhoReelTiktokLocal, { consultorId, campanhaId, tipo: `tiktok/v${Date.now()}` })
+      : null;
 
     const pecaId = `${campanhaId}__reel`;
     // O REEL E A CAPA SÃO PEÇAS INDEPENDENTES.
@@ -557,7 +624,8 @@ export async function gerarReel(tarefa) {
       tipo: 'reel',
       status: 'revisar',
       versao: 1,
-      arquivoUrl: caminhos.find((c) => c.endsWith('.mp4')) || escolherPrincipal(caminhos),
+      arquivoUrl: caminhos.find((c) => /\/reel\.mp4$/i.test(c)) || escolherPrincipal(caminhos),
+      ...(caminhoReelTiktok ? { tiktokVideoUrl: caminhoReelTiktok } : {}),
       capaUrl,
       capaStatus: anterior?.capaUrl ? (anterior.capaStatus || 'revisar') : 'revisar',
       arquivos: [...new Set([...caminhos, ...(capaUrl ? [capaUrl] : [])])],

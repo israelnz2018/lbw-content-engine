@@ -11,6 +11,8 @@ import {
   redeDaPeca, consultorLiberado, limitarLegenda, slidesDoCarrossel,
   capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto,
   deveCruzarParaFacebook, deveCruzarParaYoutube, deveCruzarParaTiktok, credenciaisFacebook,
+  blocosDeUploadTiktok,
+  escolherPrivacidadeTiktok,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -53,12 +55,28 @@ conferir('peça de LinkedIn não cruza para o YouTube',
 /* ── O bônus do TikTok ───────────────────────────────────────── */
 // Mesma regra do YouTube Shorts: só vídeo vertical, e adormecido até ter
 // credencial (ver credenciaisTiktok, sem teste aqui — é I/O de rede).
-conferir('Reel e carrossel em vídeo cruzam para o TikTok',
-  deveCruzarParaTiktok('reel') && deveCruzarParaTiktok('carrossel-video'));
-conferir('carrossel de feed (fotos) não cruza para o TikTok — ainda',
-  !deveCruzarParaTiktok('carrossel-feed'));
+conferir('Reel, carrossel em vídeo e carrossel de fotos cruzam para o TikTok',
+  deveCruzarParaTiktok('reel') && deveCruzarParaTiktok('carrossel-video') && deveCruzarParaTiktok('carrossel-feed'));
 conferir('peça de LinkedIn não cruza para o TikTok',
   !deveCruzarParaTiktok('linkedin-pdf') && !deveCruzarParaTiktok('linkedin-imagem'));
+for (const tamanho of [1024 * 1024, 70 * 1024 * 1024, 70 * 1024 * 1024 + 123, 4 * 1024 * 1024 * 1024]) {
+  const plano = blocosDeUploadTiktok(tamanho);
+  const intervalosCobremTudo = plano.blocos[0].inicio === 0
+    && plano.blocos.at(-1).fim === tamanho - 1
+    && plano.blocos.every((bloco, indice) => indice === 0 || plano.blocos[indice - 1].fim + 1 === bloco.inicio);
+  const contagemCorreta = plano.quantidade === Math.floor(tamanho / plano.tamanhoBloco);
+  const limitesValidos = plano.blocos.every((bloco, indice) =>
+    bloco.tamanho <= (indice === plano.blocos.length - 1 ? 128 : 64) * 1024 * 1024
+    && (tamanho < 5 * 1024 * 1024 || bloco.tamanho >= 5 * 1024 * 1024));
+  conferir(`blocos TikTok válidos e contíguos para arquivo de ${tamanho} bytes`, intervalosCobremTudo && contagemCorreta && limitesValidos);
+}
+conferir('TikTok recusa arquivo vazio', erroDe(() => blocosDeUploadTiktok(0)) !== null);
+conferir('TikTok Sandbox força SELF_ONLY mesmo se configuração pedir público',
+  escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { solicitada: 'PUBLIC_TO_EVERYONE' }) === 'SELF_ONLY');
+conferir('TikTok auditado respeita privacidade escolhida disponível',
+  escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { auditada: true, solicitada: 'PUBLIC_TO_EVERYONE' }) === 'PUBLIC_TO_EVERYONE');
+conferir('TikTok rejeita privacidade ausente nas opções do criador',
+  erroDe(() => escolherPrivacidadeTiktok(['SELF_ONLY'], { auditada: true, solicitada: 'PUBLIC_TO_EVERYONE' })) !== null);
 
 /* ── Trava da fase 1 ─────────────────────────────────────────── */
 conferir('israel publica', consultorLiberado('israel'));

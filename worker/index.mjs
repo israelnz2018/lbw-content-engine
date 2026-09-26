@@ -14,6 +14,7 @@ import {
 } from './firestore.mjs';
 import { EXECUTORES } from './executores.mjs';
 import { conferirAgenda } from './agenda.mjs';
+import { verificarPublicacoesTiktok } from './publicar.mjs';
 
 // Rede de segurança, não o mecanismo principal: quem acorda o worker é o ouvinte
 // da fila. Isto aqui só cobre o caso de a conexão do ouvinte cair sem avisar.
@@ -22,6 +23,7 @@ const INTERVALO_MS = Number(process.env.INTERVALO_FILA_MS || 60000);
 // O relógio da agenda. Cinco minutos de precisão bastam para uma publicação, e
 // olhar de minuto em minuto seria leitura no Firestore sem ninguém pedindo nada.
 const INTERVALO_AGENDA_MS = Number(process.env.INTERVALO_AGENDA_MS || 5 * 60000);
+const INTERVALO_TIKTOK_STATUS_MS = Number(process.env.INTERVALO_TIKTOK_STATUS_MS || 60 * 1000);
 const UMA_VEZ = process.argv.includes('--uma-vez');
 
 /**
@@ -138,6 +140,17 @@ async function baterONoRelogio() {
   }
 }
 
+async function conferirStatusTiktok() {
+  if (encerrando) return;
+  try {
+    const resultado = await verificarPublicacoesTiktok();
+    if (resultado.atualizadas) log('info', 'status TikTok atualizado', resultado);
+  } catch (e) {
+    // O acompanhamento do TikTok é isolado: nunca interfere na agenda ou fila.
+    log('erro', 'falha ao consultar status TikTok', { erro: String(e?.message || e).slice(0, 300) });
+  }
+}
+
 async function laco() {
   if (UMA_VEZ) {
     const teve = await processarUma().catch((e) => {
@@ -162,10 +175,12 @@ async function laco() {
   // Uma passada na subida: pega o que entrou enquanto o worker estava fora do ar.
   void drenarFila();
   void baterONoRelogio();
+  void conferirStatusTiktok();
 
   // Batida de segurança. Se o ouvinte cair sem avisar, o worker não fica mudo.
   const batida = setInterval(() => { void drenarFila(); }, INTERVALO_MS);
   const relogio = setInterval(() => { void baterONoRelogio(); }, INTERVALO_AGENDA_MS);
+  const statusTiktok = setInterval(() => { void conferirStatusTiktok(); }, INTERVALO_TIKTOK_STATUS_MS);
 
   await new Promise((resolve) => {
     const conferir = setInterval(() => {
@@ -173,6 +188,7 @@ async function laco() {
       clearInterval(conferir);
       clearInterval(batida);
       clearInterval(relogio);
+      clearInterval(statusTiktok);
       parar();
       resolve();
     }, 500);

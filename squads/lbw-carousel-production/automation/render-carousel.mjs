@@ -11,6 +11,7 @@ const configPath = process.argv[2] ? path.resolve(process.argv[2]) : null;
 if (!configPath || !fs.existsSync(configPath)) throw new Error('Informe um arquivo JSON de configuração existente.');
 
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const TIKTOK_CLEAN = config.tiktokClean === true;
 if (!/^\d{4}-\d{2}-\d{2}$/.test(config.date || '')) throw new Error('A data deve usar YYYY-MM-DD.');
 if (!Array.isArray(config.slides) || config.slides.length < 2 || config.slides.length > 8) {
   throw new Error('O carrossel deve ter entre 2 e 8 páginas.');
@@ -80,8 +81,8 @@ async function logoDaMarca() {
   return dataUrl(resolveAsset(config.logoPath || remota) || path.resolve(squadRoot, '..', '..', 'assets/marca/logo-lbw-branca.png'));
 }
 
-const logo = await logoDaMarca();
-if (!logo) throw new Error('Logo oficial não encontrada.');
+const logo = TIKTOK_CLEAN ? '' : await logoDaMarca();
+if (!TIKTOK_CLEAN && !logo) throw new Error('Logo oficial não encontrada.');
 
 // O cabecalho leva o NOME DA MARCA, nao o nome da pessoa.
 //
@@ -598,9 +599,9 @@ function slideHtml(slide, H = 1350, indice = 0) {
   const escala = Math.min(1.25, Math.max(0.8, Number(slide.escala) || 1));
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>${escalarFontes(cssFor(H), escala)}</style></head><body>
 <main class="page${isDark ? ' dark' : ''}${tall}">
-  <header class="brand"><img src="${logo}"><span>${escapeHtml(NOME_DA_MARCA)}</span></header>
+  ${TIKTOK_CLEAN ? '' : `<header class="brand"><img src="${logo}"><span>${escapeHtml(NOME_DA_MARCA)}</span></header>`}
   ${build(slide, indice, total)}
-  ${stripMarkup()}
+  ${TIKTOK_CLEAN ? '' : stripMarkup()}
 </main></body></html>`;
 }
 
