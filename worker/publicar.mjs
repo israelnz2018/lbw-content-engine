@@ -66,6 +66,17 @@ export function deveCruzarParaYoutube(tipo) {
 }
 
 /**
+ * TikTok, por ora, só os dois tipos de vídeo — mesma regra do YouTube Shorts.
+ *
+ * O carrossel de feed (fotos) também tem lugar no TikTok, no modo Photo — mas
+ * é outro endpoint da API, com forma própria, e fica para quando o vídeo já
+ * estiver funcionando e aprovado. Não é limitação técnica, é fatiar o trabalho.
+ */
+export function deveCruzarParaTiktok(tipo) {
+  return tipo === 'reel' || tipo === 'carrossel-video';
+}
+
+/**
  * Quem pode publicar automaticamente.
  *
  * Trava de fase 1: o token é de uma conta só. Sem esta trava, a peça de um
@@ -588,6 +599,115 @@ export async function cruzarParaYoutubeSeConfigurado(peca, legenda) {
   }
 }
 
+/* ===================== TikTok ===================== */
+//
+// ADORMECIDO ATÉ TER CREDENCIAL, igual o YouTube e o Facebook — o código sobe
+// pronto, e o único trabalho que falta quando a aprovação da TikTok for
+// concedida é colar três variáveis no Railway.
+//
+// O QUE ISTO NÃO RESOLVE, e não é bug: o app precisa passar pela auditoria da
+// própria TikTok (Content Posting API) antes de publicar público de verdade.
+// Sem auditoria completa, um post enviado como "PUBLIC_TO_EVERYONE" pode sair
+// recusado ou forçado a "só eu" — não é algo que o código controle.
+//
+// Por que FILE_UPLOAD e não PULL_FROM_URL: o outro modo do TikTok deixa ELE
+// buscar o vídeo direto do endereço, mas exige verificar a posse do domínio
+// que hospeda o arquivo — outro cadastro, outra espera. FILE_UPLOAD manda os
+// bytes direto, como já fazemos com o YouTube; sem domínio novo para provar.
+
+const TT_BASE = 'https://open.tiktokapis.com/v2';
+
+function credenciaisTiktok() {
+  const clientKey = valorDeAmbiente('TIKTOK_CLIENT_KEY');
+  const clientSecret = valorDeAmbiente('TIKTOK_CLIENT_SECRET');
+  const refreshToken = valorDeAmbiente('TIKTOK_REFRESH_TOKEN');
+  return clientKey && clientSecret && refreshToken ? { clientKey, clientSecret, refreshToken } : null;
+}
+
+/** Mesmo desenho do YouTube: o refresh token não vence, o access token vence em horas. */
+async function tokenDeAcessoTiktok({ clientKey, clientSecret, refreshToken }) {
+  const res = await fetch(`${TT_BASE}/oauth/token/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({
+      client_key: clientKey, client_secret: clientSecret,
+      refresh_token: refreshToken, grant_type: 'refresh_token',
+    }),
+  });
+  const texto = await res.text();
+  if (!res.ok) throw new Error(`TikTok recusou renovar o acesso (${res.status}): ${texto.slice(0, 400)}`);
+  const dados = JSON.parse(texto);
+  if (!dados.access_token) throw new Error(`TikTok não devolveu access_token: ${texto.slice(0, 400)}`);
+  return dados.access_token;
+}
+
+/**
+ * Duas etapas, como o YouTube: inicia o post com os metadados e o tamanho do
+ * arquivo, o TikTok devolve um endereço só para os bytes, e só então sobem.
+ *
+ * TIKTOK_PRIVACY_LEVEL existe para o Israel poder testar como "SELF_ONLY"
+ * (só ele vê) enquanto a auditoria não sai, sem mexer em código — o padrão é
+ * público, que é o que interessa depois de aprovado.
+ */
+async function publicarNoTiktok(peca, legenda, credenciais) {
+  const token = await tokenDeAcessoTiktok(credenciais);
+  const caminho = videoDaPeca(peca);
+  if (!caminho) throw new Error('Peça sem vídeo — não há o que enviar ao TikTok.');
+  const bytes = await baixarBytes(caminho);
+
+  const privacidade = valorDeAmbiente('TIKTOK_PRIVACY_LEVEL') || 'PUBLIC_TO_EVERYONE';
+  const titulo = limitarLegenda(legenda, 2200);
+
+  const iniciar = await fetch(`${TT_BASE}/post/publish/video/init/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+    },
+    body: JSON.stringify({
+      post_info: { title: titulo, privacy_level: privacidade, disable_duet: false, disable_stitch: false, disable_comment: false },
+      // Um chunk só: os cortes têm segundos de duração, nada perto do teto de
+      // 64 MB por chunk que a API aceita antes de exigir dividir o envio.
+      source_info: { source: 'FILE_UPLOAD', video_size: bytes.length, chunk_size: bytes.length, total_chunk_count: 1 },
+    }),
+  });
+  const corpoInicio = await iniciar.text();
+  if (!iniciar.ok) throw new Error(`TikTok recusou iniciar o envio (${iniciar.status}): ${corpoInicio.slice(0, 400)}`);
+  const dadosInicio = JSON.parse(corpoInicio);
+  const uploadUrl = dadosInicio?.data?.upload_url;
+  const publishId = dadosInicio?.data?.publish_id;
+  if (!uploadUrl || !publishId) throw new Error(`TikTok não devolveu endereço de envio nem publish_id: ${corpoInicio.slice(0, 400)}`);
+
+  const envio = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Range': `bytes 0-${bytes.length - 1}/${bytes.length}`,
+    },
+    body: bytes,
+  });
+  if (!envio.ok) throw new Error(`TikTok recusou o vídeo (${envio.status}): ${(await envio.text()).slice(0, 400)}`);
+
+  // A publicação em si é ASSÍNCRONA do lado do TikTok: o envio ter dado certo
+  // não significa que o post já está no ar — só que entrou na fila deles. Sem
+  // um endereço de post para devolver na hora, o link fica pendente por ora.
+  return { postId: publishId, link: null };
+}
+
+/** Mesma forma do YouTube e do Facebook: silencioso sem credencial, nunca derruba o Instagram. */
+export async function cruzarParaTiktokSeConfigurado(peca, legenda) {
+  if (!deveCruzarParaTiktok(peca.tipo)) return null;
+  const credenciais = credenciaisTiktok();
+  if (!credenciais) return null;
+
+  try {
+    const { postId, link } = await publicarNoTiktok(peca, legenda, credenciais);
+    return { status: 'publicada', postId, link, publicadoEm: new Date().toISOString(), erro: null };
+  } catch (e) {
+    return { status: 'falhou', erro: String(e?.message || e).slice(0, 500) };
+  }
+}
+
 /* ===================== LinkedIn ===================== */
 
 function credenciaisLinkedin() {
@@ -696,6 +816,9 @@ export async function publicarPeca(pecaOuId) {
 
   const youtube = await cruzarParaYoutubeSeConfigurado(peca, legenda);
   if (youtube) resultado.youtube = youtube;
+
+  const tiktok = await cruzarParaTiktokSeConfigurado(peca, legenda);
+  if (tiktok) resultado.tiktok = tiktok;
 
   return resultado;
 }

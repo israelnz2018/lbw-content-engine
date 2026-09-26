@@ -10,7 +10,7 @@
 import {
   redeDaPeca, consultorLiberado, limitarLegenda, slidesDoCarrossel,
   capaDaPeca, videoDaPeca, pdfDaPeca, conferirPeca, escolherTexto,
-  deveCruzarParaFacebook, deveCruzarParaYoutube, credenciaisFacebook,
+  deveCruzarParaFacebook, deveCruzarParaYoutube, deveCruzarParaTiktok, credenciaisFacebook,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -49,6 +49,16 @@ conferir('carrossel de feed (fotos) não cruza para o YouTube',
   !deveCruzarParaYoutube('carrossel-feed'));
 conferir('peça de LinkedIn não cruza para o YouTube',
   !deveCruzarParaYoutube('linkedin-pdf') && !deveCruzarParaYoutube('linkedin-imagem'));
+
+/* ── O bônus do TikTok ───────────────────────────────────────── */
+// Mesma regra do YouTube Shorts: só vídeo vertical, e adormecido até ter
+// credencial (ver credenciaisTiktok, sem teste aqui — é I/O de rede).
+conferir('Reel e carrossel em vídeo cruzam para o TikTok',
+  deveCruzarParaTiktok('reel') && deveCruzarParaTiktok('carrossel-video'));
+conferir('carrossel de feed (fotos) não cruza para o TikTok — ainda',
+  !deveCruzarParaTiktok('carrossel-feed'));
+conferir('peça de LinkedIn não cruza para o TikTok',
+  !deveCruzarParaTiktok('linkedin-pdf') && !deveCruzarParaTiktok('linkedin-imagem'));
 
 /* ── Trava da fase 1 ─────────────────────────────────────────── */
 conferir('israel publica', consultorLiberado('israel'));
