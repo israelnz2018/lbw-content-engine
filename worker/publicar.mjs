@@ -1079,21 +1079,46 @@ export async function publicarPeca(pecaOuId) {
   const peca = typeof pecaOuId === 'string' ? await lerPeca(pecaOuId) : pecaOuId;
   const { rede, legenda } = conferirPeca(peca, await legendaDaPeca(peca));
 
-  const resultado = rede === 'instagram'
-    ? await publicarNoInstagram(peca, legenda)
-    : await publicarNoLinkedin(peca, legenda);
+  let resultado;
+  let erroDaRedePrincipal = null;
+  try {
+    resultado = rede === 'instagram'
+      ? await publicarNoInstagram(peca, legenda)
+      : await publicarNoLinkedin(peca, legenda);
+  } catch (e) {
+    erroDaRedePrincipal = e;
+    resultado = { rede, postId: null, link: null };
+  }
 
   // Facebook e YouTube só são tentados DEPOIS do Instagram estar no ar, e
   // nenhum dos dois pode desfazê-lo: se falharem aqui, o resultado principal
   // já aconteceu.
-  const facebook = await cruzarParaFacebookSeConfigurado(peca, legenda);
-  if (facebook) resultado.facebook = facebook;
+  //
+  // O TikTok NÃO segue essa regra, e é de propósito. Facebook e YouTube são
+  // carona do Instagram: o mesmo arquivo, sem escolha própria. O TikTok é um
+  // destino que o consultor liga peça a peça, com consentimento próprio e
+  // privacidade própria — e o carrossel de fotos vai para o TikTok sem
+  // depender de nada. Deixá-lo dentro do mesmo `try` fazia uma falha do
+  // Instagram (token vencido, por exemplo) cancelar silenciosamente uma
+  // publicação que o consultor autorizou à parte.
+  if (!erroDaRedePrincipal) {
+    const facebook = await cruzarParaFacebookSeConfigurado(peca, legenda);
+    if (facebook) resultado.facebook = facebook;
 
-  const youtube = await cruzarParaYoutubeSeConfigurado(peca, legenda);
-  if (youtube) resultado.youtube = youtube;
+    const youtube = await cruzarParaYoutubeSeConfigurado(peca, legenda);
+    if (youtube) resultado.youtube = youtube;
+  }
 
   const tiktok = await cruzarParaTiktokSeConfigurado(peca, legenda);
   if (tiktok) resultado.tiktok = tiktok;
+
+  // A rede principal falhou: o erro precisa continuar subindo (o executor grava
+  // a peça como "falhou" e o consultor vê o motivo), mas levando junto o que o
+  // TikTok conseguiu fazer, para não sumir com um post que de fato foi enviado.
+  if (erroDaRedePrincipal) {
+    erroDaRedePrincipal.parcial = tiktok ? { tiktok } : null;
+    throw erroDaRedePrincipal;
+  }
 
   return resultado;
 }

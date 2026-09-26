@@ -843,6 +843,10 @@ export async function publicar(tarefa) {
     return { pecaId: peca.id, rede, postId, link, facebook: facebook?.status, youtube: youtube?.status, tiktok: tiktok?.status };
   } catch (e) {
     const motivo = String(e?.message || e).slice(0, 500);
+    // `e.parcial` traz o que saiu apesar da falha da rede principal — hoje só o
+    // TikTok, que é destino independente. Sem isto, um post já enviado ao TikTok
+    // sumiria do registro e o acompanhamento de status nunca o encontraria.
+    const parcial = e?.parcial && typeof e.parcial === 'object' ? e.parcial : {};
     await gravarPeca({
       id: peca.id,
       publicacao: {
@@ -851,9 +855,10 @@ export async function publicar(tarefa) {
         status: 'falhou',
         erro: motivo,
         falhouEm: new Date().toISOString(),
+        ...(parcial.tiktok ? { tiktok: parcial.tiktok } : {}),
       },
     });
-    return { pecaId: peca.id, falhou: motivo };
+    return { pecaId: peca.id, falhou: motivo, tiktok: parcial.tiktok?.status };
   }
 }
 

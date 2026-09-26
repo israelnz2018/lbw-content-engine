@@ -280,5 +280,56 @@ conferir('quem estava marcado primeiro sai primeiro',
   JSON.stringify(fila.map((p) => p.id)) === JSON.stringify(['manha', 'tarde']),
   JSON.stringify(fila.map((p) => p.id)));
 
+/* ── O TikTok nao depende do Instagram ───────────────────────── */
+/*
+ * Facebook e YouTube sao carona do Instagram: mesmo arquivo, sem escolha
+ * propria, e so fazem sentido se o post principal foi ao ar. O TikTok e
+ * destino PROPRIO — o consultor liga peca a peca, com consentimento e
+ * privacidade proprios, e o carrossel de fotos vai para la sem passar pelo
+ * Instagram. Estava tudo dentro do mesmo caminho de erro, entao uma falha do
+ * Instagram (um token vencido, por exemplo) cancelava calado uma publicacao
+ * que o consultor tinha autorizado a parte.
+ *
+ * Reproduz a estrutura de publicarPeca para provar a ordem sem tocar em rede.
+ */
+async function publicarPecaSimulada({ instagramFalha, tiktokLigado }) {
+  const chamadas = { facebook: 0, youtube: 0, tiktok: 0 };
+  let resultado;
+  let erroDaRedePrincipal = null;
+  try {
+    if (instagramFalha) throw new Error('Instagram: token vencido');
+    resultado = { rede: 'instagram', postId: 'ig1', link: null };
+  } catch (e) {
+    erroDaRedePrincipal = e;
+    resultado = { rede: 'instagram', postId: null, link: null };
+  }
+  if (!erroDaRedePrincipal) { chamadas.facebook++; chamadas.youtube++; }
+  let tiktok = null;
+  if (tiktokLigado) { chamadas.tiktok++; tiktok = { status: 'processando', postId: 'tt1' }; }
+  if (tiktok) resultado.tiktok = tiktok;
+  if (erroDaRedePrincipal) {
+    erroDaRedePrincipal.parcial = tiktok ? { tiktok } : null;
+    throw erroDaRedePrincipal;
+  }
+  return { resultado, chamadas };
+}
+
+let erroInstagram = null;
+try { await publicarPecaSimulada({ instagramFalha: true, tiktokLigado: true }); }
+catch (e) { erroInstagram = e; }
+conferir('Instagram falhar NAO impede o TikTok de ser tentado',
+  erroInstagram !== null && erroInstagram.parcial?.tiktok?.postId === 'tt1');
+conferir('o erro do Instagram continua subindo, para a peca constar como falhou',
+  erroInstagram !== null && String(erroInstagram.message).includes('token vencido'));
+
+try { await publicarPecaSimulada({ instagramFalha: true, tiktokLigado: false }); }
+catch (e) { conferir('sem TikTok ligado, nao ha resultado parcial', e.parcial === null); }
+
+const semFalha = await publicarPecaSimulada({ instagramFalha: false, tiktokLigado: true });
+conferir('com Instagram no ar, Facebook e YouTube continuam sendo tentados',
+  semFalha.chamadas.facebook === 1 && semFalha.chamadas.youtube === 1);
+conferir('caminho feliz devolve Instagram e TikTok juntos',
+  semFalha.resultado.rede === 'instagram' && semFalha.resultado.tiktok.status === 'processando');
+
 console.log(`\n${falhas === 0 ? 'TODOS OS TESTES PASSARAM' : `${falhas} TESTE(S) FALHARAM`}`);
 process.exit(falhas === 0 ? 0 : 1);

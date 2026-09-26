@@ -80,3 +80,43 @@ Quem garante que dois workers não peguem a mesma tarefa continua sendo a transa
 O container fica quase todo o tempo parado, esperando. O gasto real acontece nos
 minutos em que está renderizando. Não há banco de dados nem volume: o que o worker
 gera vai para o Storage e a pasta temporária é apagada no fim de cada tarefa.
+
+## As variáveis do TikTok
+
+O TikTok é a rede mais exigente das cinco, e tem variáveis que não existem nas
+outras. Ficam registradas aqui porque três delas só fazem sentido em momentos
+específicos, e daqui a um ano ninguém lembraria por quê.
+
+Vão nos **dois** serviços do Railway (a plataforma e o worker):
+
+| Variável | Para que serve |
+|---|---|
+| `TIKTOK_CLIENT_KEY` | Chave do app. A plataforma usa para montar o link de autorização; o worker, para renovar o acesso na hora de publicar. |
+| `TIKTOK_CLIENT_SECRET` | Segredo do app, no mesmo par. |
+| `TIKTOK_MEDIA_SIGNING_SECRET` | Assina os endereços temporários das imagens do carrossel de fotos. Opcional: sem ela, a chave é derivada da credencial do Firebase — mas aí **precisa ser a mesma credencial nos dois serviços**, senão o TikTok recebe 404 ao buscar as imagens. |
+
+### A variável da auditoria
+
+`TIKTOK_CLIENT_AUDITED=true` é o que libera publicação **pública**.
+
+Enquanto o app não passa pela auditoria do TikTok, toda publicação sai como
+`SELF_ONLY` (só o dono da conta vê) — e isso é regra do TikTok, não escolha
+nossa: app não auditado que tenta publicar em público é recusado. O código já
+força `SELF_ONLY` sozinho, então **não configure esta variável antes da
+aprovação sair**. Ligá-la cedo não adianta nada e faz cada publicação falhar.
+
+Depois que a auditoria for aprovada, ligar esta variável é o único passo: não
+precisa reconectar a conta nem mexer em código.
+
+`TIKTOK_PRIVACY_LEVEL` é o padrão de privacidade quando o consultor não escolhe
+um na tela. Existe principalmente para testar, e só tem efeito depois da
+auditoria — antes dela, `SELF_ONLY` ganha de qualquer valor.
+
+### Por que o TikTok não depende do Instagram
+
+Facebook e YouTube são carona: mesmo arquivo, sem escolha própria, e só são
+tentados quando o Instagram foi ao ar. O TikTok **não** segue essa regra. Ele é
+destino próprio — o consultor liga peça a peça, com consentimento e privacidade
+próprios, e o carrossel de fotos vai para lá sem passar pelo Instagram. Se a
+rede principal falhar, o TikTok ainda é tentado, e o que ele conseguir fazer é
+gravado na peça mesmo quando ela consta como "não saiu".
