@@ -83,7 +83,18 @@ const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><sty
 .hook{position:relative;z-index:3;width:960px;margin-top:27px;font-weight:950;font-style:italic;text-transform:uppercase;letter-spacing:-4.5px;line-height:.91}.hook .line{display:block;font-size:104px;overflow-wrap:anywhere}.hook .line:first-child{color:${palette.accent}}.hook .line:not(:first-child){color:${palette.ink}}
 .rule{position:absolute;left:0;top:515px;width:610px;height:14px;border-radius:10px;background:${palette.highlight};z-index:3}
 .portrait-shell{position:absolute;z-index:2;right:-40px;bottom:0;width:900px;height:950px;border-radius:52% 48% 10% 10% / 54% 54% 10% 10%;overflow:hidden;background:#EAF1FA;border:13px solid ${palette.ink};box-shadow:0 27px 0 ${palette.highlight}}
-.portrait-shell img{width:100%;height:100%;object-fit:cover;object-position:center 34%;transform:scale(1.35)}
+/* O retrato JA CHEGA recortado na proporcao desta moldura (ver
+   recorteDoRetratoDaCapa, no worker). Por isso aqui nao ha mais
+   transform:scale(1.35) nem object-position:center 34%.
+   Os dois brigavam entre si: o 34% escolhia um ponto do rosto e o scale, que
+   amplia a partir do CENTRO do elemento, empurrava tudo de novo — por isso o
+   rosto caia num lugar diferente a cada video. E o scale ainda ampliava 1,35x
+   uma imagem que ja vinha esticada, somando 2,79x de ampliacao sobre um
+   recorte de 435x390 pixels: era dai que vinha o borrao.
+   object-fit:cover com center continua, como rede de seguranca para a borda
+   de 13px que come area interna; com a proporcao certa, ele agora corta
+   pouquissimo, e sempre igual nos dois lados. */
+.portrait-shell img{width:100%;height:100%;object-fit:cover;object-position:center}
 .topic{position:absolute;z-index:4;left:0;bottom:105px;width:400px;padding:23px 25px;border-radius:17px;color:#fff;background:${palette.ink};font-size:29px;line-height:1.07;font-weight:900;text-transform:uppercase}.topic strong{display:block;margin-top:6px;color:${palette.highlight};font-size:39px}
 .bottom-accent{position:absolute;left:55px;right:55px;bottom:44px;height:16px;border-radius:10px;background:${palette.ink}}.bottom-accent:after{content:'';position:absolute;right:0;top:0;width:260px;height:16px;border-radius:10px;background:${palette.highlight}}
 </style></head><body><main class="cover"><div class="top-field"><div class="ghost">${sigla}</div></div><div class="top-line"></div><section class="safe">
@@ -140,10 +151,22 @@ fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 const browser = await chromium.launch({ headless: true });
 let hookLayout;
 try {
+  // deviceScaleFactor CONTINUA 1, e isso foi MEDIDO, não escolhido.
+  //
+  // A tentação era subir para 2 "para ganhar nitidez". Faz o contrário: a arte
+  // final é 1080x1920, e em dSF=2 a área interna do retrato passaria a exigir
+  // 1748x1848 pixels. Um vídeo Full HD só tem 436px de rosto — a ampliação
+  // subiria de 2,00x para 4,01x, pedindo ao navegador pixels que o vídeo não
+  // tem. Resolução de saída não cria detalhe que não foi capturado.
+  //
+  // Em dSF=1 a exigência é 874x924, e a ampliação em Full HD cai para 2,00x —
+  // contra os 2,79x de antes (o scale CSS de 1,35x sobre um recorte já
+  // esticado). A qualidade JPEG sobe de 94 para 96 porque pele e cabelo são
+  // onde o artefato de compressão mais aparece, e custa poucos KB.
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: 'load' });
   hookLayout = await ajustarGancho(page);
-  await page.screenshot({ path: outputPath, type: 'jpeg', quality: 94 });
+  await page.screenshot({ path: outputPath, type: 'jpeg', quality: 96 });
 } finally {
   await browser.close();
 }

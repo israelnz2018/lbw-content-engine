@@ -89,6 +89,64 @@ function ajustarCropParaResolucao(crop, dimensoes) {
   return { width, height, x, y };
 }
 
+/** A moldura do retrato na capa, em pixels da arte. Espelha .portrait-shell. */
+export const MOLDURA_CAPA = { largura: 900, altura: 950 };
+
+/**
+ * Alarga o recorte do rosto até a proporção da moldura da capa, mantendo o
+ * mesmo centro, e devolve também a escala de saída.
+ *
+ * O recorte que vem do Reel (290x260 em coordenadas 1280x720) foi pensado para
+ * a janelinha da câmera NO VÍDEO — é quase quadrado. A moldura da capa é alta
+ * (900x950). Antes o ffmpeg recebia `scale=900:950` direto sobre esse recorte,
+ * e `scale` não preserva proporção: ESPREMIA o rosto em 15% na horizontal, além
+ * de ampliar 2,07x um recorte de 435x390 pixels. Depois o CSS ainda aplicava
+ * `transform: scale(1.35)` por cima, chegando a 2,79x de ampliação — o borrão.
+ *
+ * Aqui o recorte cresce ATÉ a proporção certa em vez de o rosto ser esticado
+ * até ela: pega mais pixels que já existem no vídeo, de graça e nítidos. Só
+ * encolhe se esbarrar na borda do quadro, e então corrige o outro lado para a
+ * proporção nunca sair errada — é essa garantia que substitui o `scale` do CSS.
+ *
+ * A saída sai no tamanho EXATO da moldura (900x950), e não maior: a capa é
+ * renderizada com deviceScaleFactor 1, então entregar mais que isso só faria o
+ * navegador reamostrar para baixo — trabalho jogado fora. E entregar menos
+ * obrigaria o navegador a ampliar, que é pior que o ffmpeg com lanczos.
+ *
+ * Medido: em Full HD a ampliação cai de 2,79x (o scale CSS de 1,35x sobre um
+ * recorte já esticado 2,07x) para 2,00x. Em 4K, para 1,00x — nenhuma.
+ */
+export function recorteDoRetratoDaCapa(crop, dimensoes) {
+  const base = ajustarCropParaResolucao(crop, dimensoes);
+  const proporcaoAlvo = MOLDURA_CAPA.largura / MOLDURA_CAPA.altura;
+
+  const centroX = base.x + base.width / 2;
+  const centroY = base.y + base.height / 2;
+
+  // Cresce pelo lado que falta, nunca encolhendo o rosto já enquadrado.
+  let largura = base.width;
+  let altura = base.height;
+  if (largura / altura > proporcaoAlvo) altura = largura / proporcaoAlvo;
+  else largura = altura * proporcaoAlvo;
+
+  // O quadro é o limite. Se não couber, encolhe MANTENDO a proporção — os dois
+  // lados juntos, senão voltaríamos a deformar pelo outro caminho.
+  const fator = Math.min(1, dimensoes.width / largura, dimensoes.height / altura);
+  largura *= fator;
+  altura *= fator;
+
+  const w = parMaisProximo(largura);
+  const h = parMaisProximo(altura);
+  const x = parMaisProximo(Math.max(0, Math.min(centroX - w / 2, dimensoes.width - w)));
+  const y = parMaisProximo(Math.max(0, Math.min(centroY - h / 2, dimensoes.height - h)));
+
+  return {
+    x, y, width: w, height: h,
+    saidaLargura: MOLDURA_CAPA.largura,
+    saidaAltura: MOLDURA_CAPA.altura,
+  };
+}
+
 async function ajustarLayoutParaFonte(layout, sourceVideo, sourceHeaders) {
   const dimensoes = await dimensoesDaFonte(sourceVideo, sourceHeaders);
   const crop = ajustarCropParaResolucao({
@@ -673,7 +731,10 @@ export async function gerarCapa(tarefa) {
     // 1. O retrato, tirado do vídeo.
     const retrato = path.join(temp, 'retrato.png');
     const dimensoes = await dimensoesDaFonte(render.sourceVideo, render.sourceHeaders);
-    const r = ajustarCropParaResolucao(render.recorte, dimensoes);
+    // Recorte já na proporção da moldura e em 2x: sem espremer o rosto e sem
+    // deixar para o CSS um trabalho de ampliação que ele faz mal. Ver
+    // recorteDoRetratoDaCapa.
+    const r = recorteDoRetratoDaCapa(render.recorte, dimensoes);
     const cabecalhos = render.sourceHeaders
       ? `${Object.entries(render.sourceHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n`
       : null;
@@ -682,7 +743,7 @@ export async function gerarCapa(tarefa) {
       ...(cabecalhos ? ['-headers', cabecalhos] : []),
       '-ss', String(render.retratoEm), '-i', render.sourceVideo,
       '-frames:v', '1',
-      '-vf', `crop=${r.width}:${r.height}:${r.x}:${r.y},scale=900:950:flags=lanczos`,
+      '-vf', `crop=${r.width}:${r.height}:${r.x}:${r.y},scale=${r.saidaLargura}:${r.saidaAltura}:flags=lanczos`,
       '-update', '1', retrato,
     ], { timeout: 3 * 60 * 1000 });
     if (!fs.existsSync(retrato)) throw new Error('Não consegui extrair o retrato do vídeo.');
