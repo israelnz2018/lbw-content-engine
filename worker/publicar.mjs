@@ -619,27 +619,39 @@ const TT_BASE = 'https://open.tiktokapis.com/v2';
 
 /**
  * O refresh token vem do FIRESTORE, não de variável de ambiente — e isso é de
- * propósito.
+ * propósito, e POR CONSULTOR — outro propósito.
  *
  * O refresh token do TikTok VENCE EM 365 DIAS (o do YouTube não vence). Se ele
  * morasse no Railway, renovar uma vez por ano significaria mexer em variável
- * de ambiente e reiniciar o worker. Vindo do banco, renovar é o Israel clicar
- * no link de autorização de novo — a rota /api/tiktok/callback regrava sozinha.
+ * de ambiente e reiniciar o worker. Vindo do banco, renovar é o consultor
+ * clicar no link de autorização de novo — a rota /api/tiktok/callback regrava
+ * sozinha.
  *
- * As duas chaves do APP (que não vencem) continuam no ambiente, porque são
- * segredo de servidor e não mudam nunca. A variável TIKTOK_REFRESH_TOKEN ainda
- * é aceita, para quem preferir o caminho manual.
+ * A chave e o segredo do APP não mudam por consultor — é um app só,
+ * compartilhado, igual ao YouTube. Mas o TOKEN é da CONTA de cada um: cada
+ * consultor autoriza o próprio TikTok, e o resultado mora na gaveta dele
+ * (tiktok_consultores/{consultorId}), a mesma forma já usada pela biblioteca
+ * de vídeo do Bunny (bunny_libraries/{consultorId}). Uma gaveta global
+ * quebraria no dia em que um segundo consultor autorizasse a própria conta —
+ * o token dele sobrescreveria o do primeiro.
+ *
+ * As duas chaves do APP continuam no ambiente, porque são segredo de servidor
+ * e não mudam nunca. A variável TIKTOK_REFRESH_TOKEN ainda é aceita, para
+ * quem preferir o caminho manual — mas aí vale só para o consultor 'israel',
+ * o único que existe hoje.
  */
-async function credenciaisTiktok() {
+async function credenciaisTiktok(consultorId) {
   const clientKey = valorDeAmbiente('TIKTOK_CLIENT_KEY');
   const clientSecret = valorDeAmbiente('TIKTOK_CLIENT_SECRET');
   if (!clientKey || !clientSecret) return null;
 
   const doAmbiente = valorDeAmbiente('TIKTOK_REFRESH_TOKEN');
-  if (doAmbiente) return { clientKey, clientSecret, refreshToken: doAmbiente };
+  if (doAmbiente && String(consultorId || '').toLowerCase() === 'israel') {
+    return { clientKey, clientSecret, refreshToken: doAmbiente };
+  }
 
   try {
-    const snap = await db().collection('app_config').doc('tiktok').get();
+    const snap = await db().collection('tiktok_consultores').doc(String(consultorId || '')).get();
     const refreshToken = String(snap.exists ? (snap.data()?.refreshToken || '') : '').trim();
     return refreshToken ? { clientKey, clientSecret, refreshToken } : null;
   } catch {
@@ -722,7 +734,7 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
 /** Mesma forma do YouTube e do Facebook: silencioso sem credencial, nunca derruba o Instagram. */
 export async function cruzarParaTiktokSeConfigurado(peca, legenda) {
   if (!deveCruzarParaTiktok(peca.tipo)) return null;
-  const credenciais = await credenciaisTiktok();
+  const credenciais = await credenciaisTiktok(peca.consultorId);
   if (!credenciais) return null;
 
   try {
