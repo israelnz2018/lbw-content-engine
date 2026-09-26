@@ -733,6 +733,7 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
 
 /** Mesma forma do YouTube e do Facebook: silencioso sem credencial, nunca derruba o Instagram. */
 export async function cruzarParaTiktokSeConfigurado(peca, legenda) {
+  if (peca.publicarNoTiktok !== true) return null;
   if (!deveCruzarParaTiktok(peca.tipo)) return null;
   const credenciais = await credenciaisTiktok(peca.consultorId);
   if (!credenciais) return null;
