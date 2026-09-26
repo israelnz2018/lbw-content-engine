@@ -91,6 +91,21 @@ $titleFiltersJoined = $titleFilters -join ','
 [IO.File]::WriteAllText($brandFile, [string]$config.brandText, $utf8)
 
 $layout = $config.layout
+$sourceProbeText = ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of json $source
+if ($LASTEXITCODE -ne 0) { throw 'Não consegui identificar a resolução do vídeo-fonte para enquadrar a câmera.' }
+$sourceProbe = ($sourceProbeText -join [Environment]::NewLine) | ConvertFrom-Json
+$sourceVideoStream = $sourceProbe.streams | Select-Object -First 1
+if ($sourceVideoStream.width -le 0 -or $sourceVideoStream.height -le 0) { throw 'A resolução do vídeo-fonte é inválida.' }
+$scaleX = [double]$sourceVideoStream.width / 1280
+$scaleY = [double]$sourceVideoStream.height / 720
+$cropWidth = [Math]::Min([int]([Math]::Max(2, [Math]::Round(([double]$layout.faceCropWidth * $scaleX) / 2) * 2)), [int]$sourceVideoStream.width)
+$cropHeight = [Math]::Min([int]([Math]::Max(2, [Math]::Round(([double]$layout.faceCropHeight * $scaleY) / 2) * 2)), [int]$sourceVideoStream.height)
+$cropX = [Math]::Max(0, [Math]::Min([int]([Math]::Max(0, [Math]::Round(([double]$layout.faceCropX * $scaleX) / 2) * 2)), [int]$sourceVideoStream.width - $cropWidth))
+$cropY = [Math]::Max(0, [Math]::Min([int]([Math]::Max(0, [Math]::Round(([double]$layout.faceCropY * $scaleY) / 2) * 2)), [int]$sourceVideoStream.height - $cropHeight))
+$layout.faceCropWidth = $cropWidth
+$layout.faceCropHeight = $cropHeight
+$layout.faceCropX = $cropX
+$layout.faceCropY = $cropY
 $captionFilterPath = Convert-ToFilterPath $captions
 $brandFilterPath = Convert-ToFilterPath $brandFile
 

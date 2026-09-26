@@ -519,10 +519,8 @@ export async function gerarReel(tarefa) {
     // 2. O Reel.
     const saidaDir = path.join(temp, 'saida');
     const configPath = path.join(temp, 'config.json');
-    const layout = await ajustarLayoutParaFonte(render.layout, render.sourceVideo, render.sourceHeaders);
     fs.writeFileSync(configPath, JSON.stringify({
       ...render,
-      layout,
       captionsAss: legendaAss,
       outputPath: path.join(saidaDir, 'reel.mp4'),
       workDir: path.join(temp, 'trabalho'),

@@ -156,8 +156,35 @@ fs.writeFileSync(arquivoMarca, String(config.brandText ?? ''), 'utf8');
 
 /* ── O grafo de filtros ────────────────────────────────────── */
 
-const L = config.layout;
-if (!L) throw new Error('Informe o bloco "layout" na configuração.');
+const layoutOriginal = config.layout;
+if (!layoutOriginal) throw new Error('Informe o bloco "layout" na configuração.');
+const headersProbe = config.sourceHeaders
+  ? Object.entries(config.sourceHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n'
+  : null;
+let dimensoesFonte;
+try {
+  const probeFonte = JSON.parse(execFileSync('ffprobe', [
+    '-v', 'error',
+    ...(headersProbe ? ['-headers', headersProbe] : []),
+    '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'json', fonteVideo,
+  ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+  dimensoesFonte = probeFonte.streams?.[0];
+} catch (e) {
+  throw new Error(`Não consegui identificar a resolução do vídeo-fonte: ${String(e.stderr || e.message).slice(0, 400)}`);
+}
+if (!(dimensoesFonte?.width > 0 && dimensoesFonte?.height > 0)) {
+  throw new Error('Não consegui identificar a resolução do vídeo-fonte para enquadrar a câmera.');
+}
+const parProximo = (valor) => Math.max(2, Math.round(Number(valor) / 2) * 2);
+const larguraCrop = Math.min(parProximo(layoutOriginal.faceCropWidth * dimensoesFonte.width / 1280), dimensoesFonte.width);
+const alturaCrop = Math.min(parProximo(layoutOriginal.faceCropHeight * dimensoesFonte.height / 720), dimensoesFonte.height);
+const L = {
+  ...layoutOriginal,
+  faceCropWidth: larguraCrop,
+  faceCropHeight: alturaCrop,
+  faceCropX: Math.max(0, Math.min(parProximo(layoutOriginal.faceCropX * dimensoesFonte.width / 1280), dimensoesFonte.width - larguraCrop)),
+  faceCropY: Math.max(0, Math.min(parProximo(layoutOriginal.faceCropY * dimensoesFonte.height / 720), dimensoesFonte.height - alturaCrop)),
+};
 
 const f = caminhoParaFiltro(fonte);
 // A 1x a expressão fica LITERALMENTE a de antes, sem divisão nenhuma: o caminho
