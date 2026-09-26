@@ -48,6 +48,64 @@ function pastaTemporaria(prefixo) {
   return fs.mkdtempSync(path.join(os.tmpdir(), `lbw-${prefixo}-`));
 }
 
+/**
+ * O layout do Reel foi calibrado em 1280×720, mas o CDN pode entregar a mesma
+ * gravação em 640×360 (ou outra resolução). As coordenadas de webcam são pixels
+ * da fonte, então devem acompanhar a resolução — caso contrário, o crop pega a
+ * apresentação ao lado da câmera e o rosto fica minúsculo ou some.
+ */
+async function dimensoesDaFonte(sourceVideo, sourceHeaders = {}) {
+  const cabecalhos = Object.entries(sourceHeaders)
+    .map(([nome, valor]) => `${nome}: ${valor}\r\n`).join('');
+  const args = [
+    '-v', 'error',
+    ...(cabecalhos ? ['-headers', cabecalhos] : []),
+    '-select_streams', 'v:0',
+    '-show_entries', 'stream=width,height',
+    '-of', 'json',
+    sourceVideo,
+  ];
+  const { stdout } = await execFileAsync('ffprobe', args, { encoding: 'utf8', timeout: 60 * 1000 });
+  const stream = JSON.parse(stdout).streams?.[0];
+  const width = Number(stream?.width);
+  const height = Number(stream?.height);
+  if (!(width > 0 && height > 0)) throw new Error('Não consegui identificar a resolução do vídeo-fonte para enquadrar a câmera.');
+  return { width, height };
+}
+
+function parMaisProximo(valor) {
+  return Math.max(2, Math.round(Number(valor) / 2) * 2);
+}
+
+/** Redimensiona somente a janela capturada; a posição no Reel não muda. */
+function ajustarCropParaResolucao(crop, dimensoes) {
+  if (!crop) throw new Error('O Reel não trouxe as coordenadas do recorte da câmera.');
+  const escalaX = dimensoes.width / 1280;
+  const escalaY = dimensoes.height / 720;
+  const width = Math.min(parMaisProximo(crop.width * escalaX), dimensoes.width);
+  const height = Math.min(parMaisProximo(crop.height * escalaY), dimensoes.height);
+  const x = Math.max(0, Math.min(parMaisProximo(crop.x * escalaX), dimensoes.width - width));
+  const y = Math.max(0, Math.min(parMaisProximo(crop.y * escalaY), dimensoes.height - height));
+  return { width, height, x, y };
+}
+
+async function ajustarLayoutParaFonte(layout, sourceVideo, sourceHeaders) {
+  const dimensoes = await dimensoesDaFonte(sourceVideo, sourceHeaders);
+  const crop = ajustarCropParaResolucao({
+    width: layout.faceCropWidth,
+    height: layout.faceCropHeight,
+    x: layout.faceCropX,
+    y: layout.faceCropY,
+  }, dimensoes);
+  return {
+    ...layout,
+    faceCropWidth: crop.width,
+    faceCropHeight: crop.height,
+    faceCropX: crop.x,
+    faceCropY: crop.y,
+  };
+}
+
 async function renderizarTextoLinkedin({ campanha, criativoId, texto, fonte = 'Cortes do curso White Belt', temp, tipoStorage, versao = 1 }) {
   const frase = String(texto || '').trim();
   if (!frase) return null;
@@ -461,8 +519,10 @@ export async function gerarReel(tarefa) {
     // 2. O Reel.
     const saidaDir = path.join(temp, 'saida');
     const configPath = path.join(temp, 'config.json');
+    const layout = await ajustarLayoutParaFonte(render.layout, render.sourceVideo, render.sourceHeaders);
     fs.writeFileSync(configPath, JSON.stringify({
       ...render,
+      layout,
       captionsAss: legendaAss,
       outputPath: path.join(saidaDir, 'reel.mp4'),
       workDir: path.join(temp, 'trabalho'),
@@ -546,7 +606,8 @@ export async function gerarCapa(tarefa) {
 
     // 1. O retrato, tirado do vídeo.
     const retrato = path.join(temp, 'retrato.png');
-    const r = render.recorte || {};
+    const dimensoes = await dimensoesDaFonte(render.sourceVideo, render.sourceHeaders);
+    const r = ajustarCropParaResolucao(render.recorte, dimensoes);
     const cabecalhos = render.sourceHeaders
       ? `${Object.entries(render.sourceHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n`
       : null;
