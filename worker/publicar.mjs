@@ -9,7 +9,7 @@
  * FASE 1: só o consultor 'israel'. Cada consultor precisa do próprio token, e
  * hoje só existe um par de tokens (no Railway). Ver CONSULTORES_COM_PUBLICACAO.
  */
-import { bucket, lerPeca, lerCampanha, lerCriativo } from './firestore.mjs';
+import { bucket, db, lerPeca, lerCampanha, lerCriativo } from './firestore.mjs';
 
 const IG_BASE = 'https://graph.facebook.com/v21.0';
 const LI_BASE = 'https://api.linkedin.com/rest';
@@ -617,11 +617,36 @@ export async function cruzarParaYoutubeSeConfigurado(peca, legenda) {
 
 const TT_BASE = 'https://open.tiktokapis.com/v2';
 
-function credenciaisTiktok() {
+/**
+ * O refresh token vem do FIRESTORE, não de variável de ambiente — e isso é de
+ * propósito.
+ *
+ * O refresh token do TikTok VENCE EM 365 DIAS (o do YouTube não vence). Se ele
+ * morasse no Railway, renovar uma vez por ano significaria mexer em variável
+ * de ambiente e reiniciar o worker. Vindo do banco, renovar é o Israel clicar
+ * no link de autorização de novo — a rota /api/tiktok/callback regrava sozinha.
+ *
+ * As duas chaves do APP (que não vencem) continuam no ambiente, porque são
+ * segredo de servidor e não mudam nunca. A variável TIKTOK_REFRESH_TOKEN ainda
+ * é aceita, para quem preferir o caminho manual.
+ */
+async function credenciaisTiktok() {
   const clientKey = valorDeAmbiente('TIKTOK_CLIENT_KEY');
   const clientSecret = valorDeAmbiente('TIKTOK_CLIENT_SECRET');
-  const refreshToken = valorDeAmbiente('TIKTOK_REFRESH_TOKEN');
-  return clientKey && clientSecret && refreshToken ? { clientKey, clientSecret, refreshToken } : null;
+  if (!clientKey || !clientSecret) return null;
+
+  const doAmbiente = valorDeAmbiente('TIKTOK_REFRESH_TOKEN');
+  if (doAmbiente) return { clientKey, clientSecret, refreshToken: doAmbiente };
+
+  try {
+    const snap = await db().collection('app_config').doc('tiktok').get();
+    const refreshToken = String(snap.exists ? (snap.data()?.refreshToken || '') : '').trim();
+    return refreshToken ? { clientKey, clientSecret, refreshToken } : null;
+  } catch {
+    // Sem acesso ao banco, o cruzamento fica desligado — nunca derruba o
+    // Instagram por causa de um bônus.
+    return null;
+  }
 }
 
 /** Mesmo desenho do YouTube: o refresh token não vence, o access token vence em horas. */
@@ -697,7 +722,7 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
 /** Mesma forma do YouTube e do Facebook: silencioso sem credencial, nunca derruba o Instagram. */
 export async function cruzarParaTiktokSeConfigurado(peca, legenda) {
   if (!deveCruzarParaTiktok(peca.tipo)) return null;
-  const credenciais = credenciaisTiktok();
+  const credenciais = await credenciaisTiktok();
   if (!credenciais) return null;
 
   try {
