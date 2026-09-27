@@ -301,14 +301,21 @@ if (config.cover) {
   // original. Sem multiplicar pela velocidade, um Reel a 1,25x pegaria o retrato
   // num instante anterior ao pretendido.
   const segundoNaFonte = inicioMs / 1000 + segundoDaCapa * velocidade;
-  execFileSync('ffmpeg', [
-    '-y', '-hide_banner', '-loglevel', 'error',
-    ...(cabecalhos ? ['-headers', cabecalhos] : []),
-    '-ss', paraTempoFfmpeg(segundoNaFonte * 1000), '-i', fonteVideo,
-    '-frames:v', '1',
-    '-vf', `crop=${L.faceCropWidth}:${L.faceCropHeight}:${L.faceCropX}:${L.faceCropY},scale=900:950:flags=lanczos`,
-    '-update', '1', retrato,
-  ], { stdio: 'pipe' });
+  // O MESMO retrato do "Refazer capa" (worker/retrato.mjs): círculo exato da
+  // câmera, do original em alta resolução, no quadro mais parado e nítido.
+  //
+  // Aqui havia uma SEGUNDA cópia do recorte antigo — quadrado fixo esticado a
+  // 900x950 —, e era dela que saía a PRIMEIRA capa de todo Reel novo. As
+  // correções anteriores do retrato mexeram só no caminho do "Refazer capa", e
+  // por isso a capa de cada Reel novo continuava saindo com o defeito.
+  const { extrairRetrato } = await import(new URL('../../../worker/retrato.mjs', import.meta.url).href);
+  await extrairRetrato({
+    sourceVideo: fonteVideo,
+    cabecalhos: config.sourceHeaders || null,
+    instante: segundoNaFonte,
+    saida: retrato,
+    temp: trabalho,
+  });
   if (!fs.existsSync(retrato)) throw new Error('Nao consegui extrair o retrato para a capa.');
 
   const configCapa = path.join(trabalho, 'config-capa.json');

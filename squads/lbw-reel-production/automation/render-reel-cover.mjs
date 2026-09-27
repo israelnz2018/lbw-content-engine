@@ -82,19 +82,18 @@ const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><sty
 .series{padding:13px 22px 12px;border-radius:10px;color:#fff;background:${palette.accent};font-size:30px;line-height:1;font-weight:900;letter-spacing:1.5px}
 .hook{position:relative;z-index:3;width:960px;margin-top:27px;font-weight:950;font-style:italic;text-transform:uppercase;letter-spacing:-4.5px;line-height:.91}.hook .line{display:block;font-size:104px;overflow-wrap:anywhere}.hook .line:first-child{color:${palette.accent}}.hook .line:not(:first-child){color:${palette.ink}}
 .rule{position:absolute;left:0;top:515px;width:610px;height:14px;border-radius:10px;background:${palette.highlight};z-index:3}
-.portrait-shell{position:absolute;z-index:2;right:-40px;bottom:0;width:900px;height:950px;border-radius:52% 48% 10% 10% / 54% 54% 10% 10%;overflow:hidden;background:#EAF1FA;border:13px solid ${palette.ink};box-shadow:0 27px 0 ${palette.highlight}}
-/* O retrato JA CHEGA recortado na proporcao desta moldura E ja enquadrado
-   para preenche-la (ver recorteDoRetratoDaCapa, no worker).
-   Por isso aqui nao ha mais transform:scale(1.35) nem object-position:34%.
-   ATENCAO ao mexer: o scale(1.35) fazia DUAS coisas — ampliava (mal, borrando)
-   e ENQUADRAVA, aproximando o rosto ate sangrar nas bordas. Remover so o zoom
-   deixou sobrar fundo de sala dentro do circulo, e a capa foi recusada. O
-   enquadramento continua existindo, agora no recorte do ffmpeg, onde le pixel
-   de verdade do video em vez de ampliar uma imagem pronta.
-   object-fit:cover com center continua, como rede de seguranca para a borda
-   de 13px que come area interna; com a proporcao certa, ele corta
-   pouquissimo, e sempre igual nos dois lados. */
-.portrait-shell img{width:100%;height:100%;object-fit:cover;object-position:center}
+/* O RETRATO E UM CIRCULO PERFEITO, do mesmo formato da bolha da camera.
+   O worker (retrato.mjs) recorta exatamente o circulo da camera, dentro de um
+   quadrado; os cantos desse quadrado sao slide. Uma moldura redonda do mesmo
+   circulo mostra 100% da camera e nenhum pixel de slide — sem sobra, sem
+   fundo cinza, sem o "ea de" que vazou numa capa. Era a moldura em arco que
+   obrigava a esticar e aproximar a imagem para preencher os cantos.
+   Pedido do Israel: "deixe um circulo perfeito para ficar exatamente igual a
+   minha foto" e "sem gaps entre minha imagem e o circulo".
+   820px de diametro por fora, 794 por dentro da borda: o retrato chega com
+   800x800 e o object-fit so descarta 3px de cada lado. */
+.portrait-shell{position:absolute;z-index:2;right:-5px;bottom:30px;width:820px;height:820px;border-radius:50%;overflow:hidden;background:${palette.ink};border:13px solid ${palette.ink};box-shadow:0 22px 0 ${palette.highlight}}
+.portrait-shell img{display:block;width:100%;height:100%;object-fit:cover;object-position:center}
 .topic{position:absolute;z-index:4;left:0;bottom:105px;width:400px;padding:23px 25px;border-radius:17px;color:#fff;background:${palette.ink};font-size:29px;line-height:1.07;font-weight:900;text-transform:uppercase}.topic strong{display:block;margin-top:6px;color:${palette.highlight};font-size:39px}
 .bottom-accent{position:absolute;left:55px;right:55px;bottom:44px;height:16px;border-radius:10px;background:${palette.ink}}.bottom-accent:after{content:'';position:absolute;right:0;top:0;width:260px;height:16px;border-radius:10px;background:${palette.highlight}}
 </style></head><body><main class="cover"><div class="top-field"><div class="ghost">${sigla}</div></div><div class="top-line"></div><section class="safe">

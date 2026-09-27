@@ -1,141 +1,87 @@
 /**
- * O retrato da capa: proporcao, nitidez e posicao.
+ * O retrato da capa: círculo exato da câmera, melhor fonte, quadro mais parado.
  *
- * O Israel relatou duas coisas na mesma imagem: "minha imagem dificilmente fica
- * no local correto" e "a qualidade da imagem tambem esta muito ruim". Eram tres
- * defeitos somados, todos mediveis:
+ * O Israel, depois de várias rodadas: "de uma vez por todas... não aceito que
+ * minha imagem não ocupe 100 por cento do espaço... a qualidade precisa
+ * melhorar... padronize... deixe um círculo perfeito". Ver worker/retrato.mjs.
  *
- *  1. DEFORMACAO — o recorte do rosto (290x260 em 1280x720, quase quadrado) era
- *     forcado a 900x950 com `scale`, que nao preserva proporcao: 15% de aperto
- *     na horizontal.
- *  2. BORRAO — esse mesmo `scale` ampliava 2,07x um recorte de 435x390 px, e o
- *     CSS ainda aplicava transform:scale(1.35) por cima: 2,79x no total.
- *  3. POSICAO INSTAVEL — object-position:center 34% escolhia um ponto do rosto
- *     e o transform:scale, que amplia a partir do centro do ELEMENTO, empurrava
- *     tudo de novo. Dois ajustes brigando: cada video caia num lugar.
- *
- * Estes testes provam a correcao pela aritmetica, sem depender de gerar imagem.
+ *   node teste-retrato-capa.mjs
  */
-import assert from 'node:assert/strict';
-import { recorteDoRetratoDaCapa, MOLDURA_CAPA } from './executores.mjs';
+import {
+  CIRCULO_DA_CAMERA, MARGEM_DO_CIRCULO, quadradoDaCamera,
+  nitidezDoQuadro, movimentoEntre, escolherQuadro, segundosDe, fonteOriginal,
+} from './retrato.mjs';
 
-let passaram = 0;
-const conferir = (nome, condicao, detalhe = '') => {
-  if (condicao) { passaram++; console.log(`ok   ${nome}`); }
-  else { console.log(`FALHOU ${nome}${detalhe ? ` — ${detalhe}` : ''}`); process.exitCode = 1; }
+let falhas = 0;
+const conferir = (nome, ok, detalhe = '') => {
+  if (!ok) falhas++;
+  console.log(`${ok ? 'ok  ' : 'FALHA'} ${nome}${ok || !detalhe ? '' : `\n        ${detalhe}`}`);
 };
 
-const PROPORCAO_ALVO = MOLDURA_CAPA.largura / MOLDURA_CAPA.altura;
-const recorteReal = { width: 290, height: 260, x: 500, y: 200 };
-
-/* ── 1. Proporcao: o defeito principal ───────────────────────── */
-const fullHd = { width: 1920, height: 1080 };
-const r = recorteDoRetratoDaCapa(recorteReal, fullHd);
-const proporcao = r.width / r.height;
-const desvio = Math.abs(proporcao - PROPORCAO_ALVO) / PROPORCAO_ALVO;
-
-conferir('o recorte sai na proporcao da moldura (sem espremer o rosto)',
-  desvio < 0.01, `proporcao ${proporcao.toFixed(4)} vs alvo ${PROPORCAO_ALVO.toFixed(4)}`);
-
-conferir('ANTES o mesmo recorte seria espremido em ~15%',
-  Math.abs((PROPORCAO_ALVO / (435 / 390)) - 1) > 0.13);
-
-/* ── 2. Nitidez: crescer em vez de esticar ───────────────────── */
-// dSF=1 e MEDIDO, nao chutado: em dSF=2 a area interna exigiria 1748x1848 px,
-// e um Full HD so tem 436px de rosto — a ampliacao dobraria. Resolucao de
-// saida nao cria detalhe que a camera nao capturou.
-conferir('a saida sai no tamanho exato da moldura, sem desperdicio nos dois sentidos',
-  r.saidaLargura === MOLDURA_CAPA.largura && r.saidaAltura === MOLDURA_CAPA.altura);
-
-/* ── 2b. O ENQUADRAMENTO: o defeito que eu mesmo causei ──────── */
-/*
- * Eu removi o `transform: scale(1.35)` do CSS achando que era so um zoom ruim.
- * Era TAMBEM o enquadramento: aproximava o rosto ate sangrar nas bordas da
- * moldura, e o overflow:hidden cortava o excesso. Sem ele, o retrato passou a
- * encaixar justo e apareceu fundo de sala em volta do rosto — o Israel recusou:
- * "nao pode ficar espaco entre minha imagem e circulo".
- *
- * Estas assercoes travam o enquadramento para ninguem repetir o erro.
- */
-const janelaSemAproximar = 436 * 460;   // o que seria sem APROXIMACAO_DO_ROSTO
-const janelaAgora = r.width * r.height;
-conferir('a janela de recorte e MENOR que a moldura inteira (o rosto e aproximado)',
-  janelaAgora < janelaSemAproximar,
-  `${janelaAgora} vs ${janelaSemAproximar} — se nao for menor, sobra fundo no circulo`);
-
-const aproximacaoEfetiva = Math.sqrt(janelaSemAproximar / janelaAgora);
-conferir('a aproximacao bate com o 1,35x das capas aprovadas',
-  Math.abs(aproximacaoEfetiva - 1.35) < 0.03,
-  `aproximacao ${aproximacaoEfetiva.toFixed(3)}x`);
-
-// O ganho que sobrevive: mesma aproximacao de antes, SEM os 15% de deformacao.
-const amplAgora = MOLDURA_CAPA.largura / r.width;
-conferir('a ampliacao NAO piora em relacao as capas aprovadas (2,79x em Full HD)',
-  amplAgora <= 2.85, `agora ${amplAgora.toFixed(2)}x`);
-console.log(`     (Full HD: ${amplAgora.toFixed(2)}x, igual ao aprovado — mas sem espremer 15%)`);
-
-/* ── 3. Centro preservado: a posicao estavel ─────────────────── */
-const centroBaseX = (recorteReal.x * 1.5) + (recorteReal.width * 1.5) / 2;
-const centroNovoX = r.x + r.width / 2;
-conferir('o centro do rosto nao se desloca ao alargar o recorte',
-  Math.abs(centroNovoX - centroBaseX) <= 2,
-  `centro ${centroNovoX} vs ${centroBaseX}`);
-
-/* ── 4. A borda do quadro: nunca estoura, nunca deforma ──────── */
-const rostoNaBorda = recorteDoRetratoDaCapa(
-  { width: 290, height: 260, x: 1180, y: 600 }, fullHd,
-);
-conferir('rosto no canto: o recorte fica dentro do quadro',
-  rostoNaBorda.x >= 0 && rostoNaBorda.y >= 0
-  && rostoNaBorda.x + rostoNaBorda.width <= fullHd.width
-  && rostoNaBorda.y + rostoNaBorda.height <= fullHd.height,
-  JSON.stringify(rostoNaBorda));
-
-const propBorda = rostoNaBorda.width / rostoNaBorda.height;
-conferir('rosto no canto: a proporcao CONTINUA certa (encolhe os dois lados juntos)',
-  Math.abs(propBorda - PROPORCAO_ALVO) / PROPORCAO_ALVO < 0.02,
-  `proporcao ${propBorda.toFixed(4)}`);
-
-/* ── 5. Fontes de varias resolucoes ──────────────────────────── */
-for (const fonte of [
-  { width: 1280, height: 720 }, { width: 1920, height: 1080 },
-  { width: 2560, height: 1440 }, { width: 3840, height: 2160 },
-]) {
-  const saida = recorteDoRetratoDaCapa(recorteReal, fonte);
-  const p = saida.width / saida.height;
-  conferir(`fonte ${fonte.width}x${fonte.height}: proporcao certa e dentro do quadro`,
-    Math.abs(p - PROPORCAO_ALVO) / PROPORCAO_ALVO < 0.02
-    && saida.x >= 0 && saida.y >= 0
-    && saida.x + saida.width <= fonte.width
-    && saida.y + saida.height <= fonte.height,
-    `${saida.width}x${saida.height} proporcao ${p.toFixed(4)}`);
+/* ── O círculo nunca pega slide ──────────────────────────────── */
+// Medidas reais, pixel a pixel, de dois vídeos (640x360 e 1280x720), e
+// conferidas visualmente em mais quatro vídeos Full HD.
+for (const [w, h] of [[640, 360], [1280, 720], [1920, 1080]]) {
+  const q = quadradoDaCamera({ width: w, height: h });
+  const cxReal = CIRCULO_DA_CAMERA.cx * w;
+  const cyReal = CIRCULO_DA_CAMERA.cy * h;
+  const rReal = CIRCULO_DA_CAMERA.r * w;
+  const cx = q.x + q.width / 2;
+  const cy = q.y + q.height / 2;
+  const r = q.width / 2;
+  // O círculo usado cabe inteiro dentro da bolha da câmera: nenhum pixel de slide.
+  const folga = rReal - (Math.hypot(cx - cxReal, cy - cyReal) + r);
+  conferir(`${w}x${h}: o círculo usado cabe inteiro na bolha da câmera`, folga >= 0, `folga ${folga.toFixed(1)}px`);
+  conferir(`${w}x${h}: não encosta na faixa azul do rodapé do slide`, cy + r < 0.925 * h, `base ${cy + r} de ${h}`);
+  conferir(`${w}x${h}: não passa da borda direita`, cx + r <= w);
+  conferir(`${w}x${h}: quadrado dentro do quadro e com lados pares (ffmpeg)`,
+    q.x >= 0 && q.y >= 0 && q.x + q.width <= w && q.y + q.height <= h
+    && q.width % 2 === 0 && q.x % 2 === 0 && q.y % 2 === 0);
 }
 
-/* ── 6. Numeros pares: exigencia do ffmpeg ───────────────────── */
-conferir('largura e altura pares (o ffmpeg recusa impares em varios codecs)',
-  r.width % 2 === 0 && r.height % 2 === 0 && r.x % 2 === 0 && r.y % 2 === 0);
+// O ganho que motivou buscar o ORIGINAL: pixels reais de rosto por resolução.
+const lado360 = quadradoDaCamera({ width: 640, height: 360 }).width;
+const lado1080 = quadradoDaCamera({ width: 1920, height: 1080 }).width;
+conferir('Full HD tem ~3x mais pixels de câmera por eixo que 360p',
+  lado1080 / lado360 > 2.9, `${lado360}px vs ${lado1080}px`);
+console.log(`     (360p: ${lado360}px · 1080p: ${lado1080}px de lado útil)`);
 
-/* ── 7. O que de fato melhorou, medido ───────────────────────── */
-/*
- * NAO se mede isto por "quantidade de pixels do recorte": a janela agora e
- * MENOR de proposito, porque o enquadramento aproxima o rosto (ver 2b). Uma
- * assercao de "mais pixels" existia aqui e passou a falhar quando restaurei o
- * enquadramento — ela media a coisa errada.
- *
- * O ganho real e a PROPORCAO: mesma aproximacao das capas aprovadas, sem os
- * 15% de aperto horizontal. Um rosto quadrado sai quadrado.
- */
-const fatorLargura = MOLDURA_CAPA.largura / r.width;
-const fatorAltura = MOLDURA_CAPA.altura / r.height;
-conferir('os dois eixos sao ampliados IGUALMENTE (era isso que deformava)',
-  Math.abs(fatorLargura - fatorAltura) / fatorLargura < 0.01,
-  `largura ${fatorLargura.toFixed(3)}x vs altura ${fatorAltura.toFixed(3)}x`);
+conferir('a margem interna existe (bolha encosta no rodapé e no triângulo do slide)',
+  MARGEM_DO_CIRCULO < 1 && MARGEM_DO_CIRCULO > 0.7);
 
-// O caminho antigo: crop 436x390 -> 900x950. Um rosto quadrado virava retangulo.
-const deformacaoAntiga = (950 / 390) / (900 / 436);
-conferir('ANTES os eixos eram ampliados em proporcoes diferentes (18% de erro)',
-  Math.abs(deformacaoAntiga - 1) > 0.15,
-  `${((deformacaoAntiga - 1) * 100).toFixed(1)}% de deformacao no caminho antigo`);
-console.log(`     (rosto quadrado: antes saia esticado ${((deformacaoAntiga - 1) * 100).toFixed(0)}%, agora sai quadrado)`);
+/* ── Instante e fonte ────────────────────────────────────────── */
+conferir('instante "00:01:43.190" vira 103,19s', Math.abs(segundosDe('00:01:43.190') - 103.19) < 1e-9);
+conferir('instante numérico passa direto', segundosDe(42.5) === 42.5);
+conferir('MP4 do Bunny vira o ORIGINAL',
+  fonteOriginal('https://vz-a.b-cdn.net/9741e6a7-0bef-4874-a0dc-82c42b0eef2e/play_360p.mp4')
+    === 'https://vz-a.b-cdn.net/9741e6a7-0bef-4874-a0dc-82c42b0eef2e/original');
+conferir('outra origem (Storage) volta como veio',
+  fonteOriginal('https://storage.googleapis.com/x/video.mp4') === 'https://storage.googleapis.com/x/video.mp4');
 
-console.log(`\n${process.exitCode ? 'FALHOU' : `TODOS OS ${passaram} TESTES PASSARAM`}`);
+/* ── Escolha do quadro ───────────────────────────────────────── */
+const L = 100;
+const liso = (v) => new Uint8Array(L * L).fill(v);
+const xadrez = () => {
+  const a = new Uint8Array(L * L);
+  for (let y = 0; y < L; y++) for (let x = 0; x < L; x++) a[y * L + x] = ((x >> 1) + (y >> 1)) % 2 ? 200 : 40;
+  return a;
+};
+conferir('rosto com detalhe é mais nítido que rosto liso', nitidezDoQuadro(xadrez(), L) > nitidezDoQuadro(liso(120), L));
+conferir('quadros iguais: movimento zero', movimentoEntre(liso(100), liso(100), L) === 0);
+conferir('quadros diferentes: há movimento', movimentoEntre(liso(100), liso(160), L) > 0);
+
+// Mudança só no canto (slide trocando de página) não conta como movimento do rosto.
+const cantoMudou = liso(100);
+for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) cantoMudou[y * L + x] = 250;
+conferir('slide mudando no canto não conta como movimento',
+  movimentoEntre(liso(100), cantoMudou, L) === 0 && movimentoEntre(liso(100), cantoMudou, L, true) === 0);
+
+// Sequência: o apresentador gesticula (quadros mudam), para no meio (3 quadros
+// iguais e nítidos), e volta a gesticular. O escolhido tem de ser o do meio da pausa.
+const sequencia = [liso(60), liso(140), liso(70), xadrez(), xadrez(), xadrez(), liso(150), liso(50)];
+const escolhido = escolherQuadro(sequencia, L);
+conferir('escolhe o quadro parado e nítido, não o do gesto', escolhido === 4, `escolheu ${escolhido}`);
+conferir('um quadro só: escolhe ele', escolherQuadro([liso(100)], L) === 0);
+
+console.log(`\n${falhas === 0 ? 'TODOS OS TESTES PASSARAM' : `${falhas} TESTE(S) FALHARAM`}`);
+process.exit(falhas === 0 ? 0 : 1);

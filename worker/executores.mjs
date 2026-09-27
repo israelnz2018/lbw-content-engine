@@ -20,6 +20,7 @@ import {
   resolverImagensDoRender, imagensPorPagina, registrarUso, prepararImagem as prepararImagemDaBiblioteca,
 } from './imagens.mjs';
 import { publicarPeca, redeDaPeca, reenviarCruzamentosQueFalharam, legendaDaPeca } from './publicar.mjs';
+import { extrairRetrato } from './retrato.mjs';
 import { jaSaiu } from './agenda.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -89,82 +90,10 @@ function ajustarCropParaResolucao(crop, dimensoes) {
   return { width, height, x, y };
 }
 
-/** A moldura do retrato na capa, em pixels da arte. Espelha .portrait-shell. */
-export const MOLDURA_CAPA = { largura: 900, altura: 950 };
-
-/**
- * O quanto o rosto é aproximado para preencher a moldura.
- *
- * Este número TEM DE EXISTIR, e descobri isso quebrando a capa. O CSS tinha
- * `transform: scale(1.35)` e eu o removi achando que era só um zoom ruim —
- * era, mas era TAMBÉM o enquadramento: ele aproximava o rosto até sangrar nas
- * bordas, e o `overflow: hidden` cortava o excesso. Sem ele, o retrato passou a
- * encaixar justo na moldura e apareceu fundo de sala em volta do rosto: o
- * "espaço entre a imagem e o círculo" que o Israel recusou.
- *
- * 1.35 reproduz exatamente o enquadramento aprovado das capas antigas. A
- * diferença é ONDE ele acontece: no recorte do ffmpeg, que lê pixels de
- * verdade do vídeo, em vez de no CSS, que ampliava uma imagem já pronta.
- */
-const APROXIMACAO_DO_ROSTO = 1.35;
-
-/**
- * Recorta o rosto na proporção da moldura da capa E já enquadrado para
- * preenchê-la, mantendo o mesmo centro.
- *
- * Duas coisas estavam erradas no caminho antigo, e a correção de uma não pode
- * desfazer a outra:
- *
- * 1. O recorte do Reel (290x260 em 1280x720) é quase quadrado — pensado para a
- *    janelinha da câmera NO VÍDEO. A moldura da capa é alta (900x950). O ffmpeg
- *    recebia `scale=900:950` direto, e `scale` não preserva proporção:
- *    ESPREMIA o rosto em 15%. Aqui o recorte CRESCE até a proporção certa em
- *    vez de o rosto ser esticado até ela.
- *
- * 2. O enquadramento (APROXIMACAO_DO_ROSTO) precisa continuar existindo, senão
- *    sobra fundo dentro do círculo. Ele agora é feito ENCOLHENDO A JANELA DE
- *    RECORTE — pegar menos área do vídeo e ampliá-la com lanczos é o mesmo
- *    enquadramento com muito menos perda do que o zoom do CSS fazia.
- *
- * A saída sai no tamanho EXATO da moldura (900x950): a capa é renderizada com
- * deviceScaleFactor 1, então entregar mais só faria o navegador reamostrar para
- * baixo, e entregar menos o obrigaria a ampliar — pior que o ffmpeg.
- */
-export function recorteDoRetratoDaCapa(crop, dimensoes) {
-  const base = ajustarCropParaResolucao(crop, dimensoes);
-  const proporcaoAlvo = MOLDURA_CAPA.largura / MOLDURA_CAPA.altura;
-
-  const centroX = base.x + base.width / 2;
-  const centroY = base.y + base.height / 2;
-
-  // Cresce pelo lado que falta, nunca encolhendo o rosto já enquadrado.
-  let largura = base.width;
-  let altura = base.height;
-  if (largura / altura > proporcaoAlvo) altura = largura / proporcaoAlvo;
-  else largura = altura * proporcaoAlvo;
-
-  // O enquadramento: janela menor = rosto maior na capa. É o que o scale(1.35)
-  // do CSS fazia, movido para cá — mesma aproximação, sem ampliar bitmap pronto.
-  largura /= APROXIMACAO_DO_ROSTO;
-  altura /= APROXIMACAO_DO_ROSTO;
-
-  // O quadro é o limite. Se não couber, encolhe MANTENDO a proporção — os dois
-  // lados juntos, senão voltaríamos a deformar pelo outro caminho.
-  const fator = Math.min(1, dimensoes.width / largura, dimensoes.height / altura);
-  largura *= fator;
-  altura *= fator;
-
-  const w = parMaisProximo(largura);
-  const h = parMaisProximo(altura);
-  const x = parMaisProximo(Math.max(0, Math.min(centroX - w / 2, dimensoes.width - w)));
-  const y = parMaisProximo(Math.max(0, Math.min(centroY - h / 2, dimensoes.height - h)));
-
-  return {
-    x, y, width: w, height: h,
-    saidaLargura: MOLDURA_CAPA.largura,
-    saidaAltura: MOLDURA_CAPA.altura,
-  };
-}
+// O retrato da capa saiu daqui para worker/retrato.mjs — recorte do círculo
+// exato da câmera, do original em alta resolução, no quadro mais parado. O
+// recorte antigo (quadrado fixo esticado para a moldura em arco) foi removido
+// junto com a moldura: não sobra uma segunda versão para divergir.
 
 async function ajustarLayoutParaFonte(layout, sourceVideo, sourceHeaders) {
   const dimensoes = await dimensoesDaFonte(sourceVideo, sourceHeaders);
@@ -747,25 +676,17 @@ export async function gerarCapa(tarefa) {
     // "processando" travava o Reel inteiro na tela enquanto só a capa era refeita.
     await atualizarCampanha(campanhaId, { capaStatus: 'processando', capaErro: null }).catch(() => {});
 
-    // 1. O retrato, tirado do vídeo.
+    // 1. O retrato: círculo exato da câmera, do original em alta resolução,
+    // no quadro mais parado e nítido. Ver worker/retrato.mjs — o mesmo módulo
+    // que o render-reel.mjs usa na primeira capa de cada Reel.
     const retrato = path.join(temp, 'retrato.png');
-    const dimensoes = await dimensoesDaFonte(render.sourceVideo, render.sourceHeaders);
-    // Recorte já na proporção da moldura e em 2x: sem espremer o rosto e sem
-    // deixar para o CSS um trabalho de ampliação que ele faz mal. Ver
-    // recorteDoRetratoDaCapa.
-    const r = recorteDoRetratoDaCapa(render.recorte, dimensoes);
-    const cabecalhos = render.sourceHeaders
-      ? `${Object.entries(render.sourceHeaders).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n`
-      : null;
-    await execFileAsync('ffmpeg', [
-      '-y', '-hide_banner', '-loglevel', 'error',
-      ...(cabecalhos ? ['-headers', cabecalhos] : []),
-      '-ss', String(render.retratoEm), '-i', render.sourceVideo,
-      '-frames:v', '1',
-      '-vf', `crop=${r.width}:${r.height}:${r.x}:${r.y},scale=${r.saidaLargura}:${r.saidaAltura}:flags=lanczos`,
-      '-update', '1', retrato,
-    ], { timeout: 3 * 60 * 1000 });
-    if (!fs.existsSync(retrato)) throw new Error('Não consegui extrair o retrato do vídeo.');
+    const infoRetrato = await extrairRetrato({
+      sourceVideo: render.sourceVideo,
+      cabecalhos: render.sourceHeaders || null,
+      instante: render.retratoEm,
+      saida: retrato,
+      temp,
+    });
 
     // 2. A arte.
     const saidaDir = path.join(temp, 'saida');
@@ -811,8 +732,12 @@ export async function gerarCapa(tarefa) {
 
     await atualizarCampanha(campanhaId, {
       capaStatus: 'pronta', capaErro: null, capaTarefaAtivaId: null,
+      // Fica registrado de onde saiu o retrato: quando uma capa sair fraca, a
+      // resposta está aqui (ex.: resolucao 640x360, ladoReal 98) em vez de
+      // precisar reabrir o vídeo para descobrir.
+      capaRetrato: infoRetrato,
     }).catch(() => {});
-    return { capa: nova };
+    return { capa: nova, retrato: infoRetrato };
   } catch (e) {
     // Na última tentativa a tela precisa saber que falhou, e não ficar girando.
     if ((tarefa.tentativas || 0) >= 3) {
