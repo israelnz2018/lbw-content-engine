@@ -870,11 +870,69 @@ async function consultarCriadorTiktok(token) {
   return resposta.data;
 }
 
-async function publicarCarrosselFotosTiktok(peca, legenda, token, criador, privacidade) {
-  const slides = Array.isArray(peca.tiktokSlides) ? peca.tiktokSlides : [];
-  if (slides.length < 2 || slides.length > 35) {
-    throw new Error('A versão limpa do carrossel TikTok precisa ter de 2 a 35 imagens. Gere novamente este carrossel.');
+/**
+ * As imagens limpas do carrossel para o TikTok — gerando-as na hora se a
+ * produção original não tiver feito isso.
+ *
+ * O Israel achou um Reel que perdeu a versão TikTok depois de clicar
+ * "Refazer" numa peça: regerarPeca() nunca gerou a cópia tiktokClean, só
+ * gerarCampanha() (a produção da campanha inteira) faz isso. Corrigido à
+ * parte (regerarPeca agora também gera), mas isso só evita casos NOVOS —
+ * peças já quebradas continuariam travadas até alguém regenerar a campanha
+ * toda de novo.
+ *
+ * Vídeo (reel/carrossel-video) já tinha esse plano B: arquivoVideoTikTok()
+ * remove a faixa de marca NA HORA de publicar, com ffmpeg, se a versão limpa
+ * não existir. Carrossel de fotos não tinha — só um erro dizendo "gere de
+ * novo". Aqui ele ganha o mesmo plano B: recorta a mesma faixa (idêntica ao
+ * filtro já usado para carrossel-video, mesmo layout) de cada imagem
+ * ORIGINAL já publicada no Instagram, sobe a versão limpa, e GRAVA
+ * `tiktokSlides` na peça — a próxima tentativa encontra pronto, sem refazer.
+ */
+export async function slidesLimposDoCarrosselTiktok(peca) {
+  const jaTem = Array.isArray(peca.tiktokSlides) ? peca.tiktokSlides : [];
+  if (jaTem.length >= 2 && jaTem.length <= 35) return jaTem;
+
+  if (peca.origem === 'enviada') {
+    throw new Error('Este carrossel enviado manualmente não tem uma versão sem a faixa de marca; use arquivos originais sem sobreposição.');
   }
+
+  const originais = (Array.isArray(peca.arquivos) ? peca.arquivos : [])
+    .filter((c) => /slide-\d+\.png$/i.test(c))
+    .sort((a, b) => a.localeCompare(b));
+  if (originais.length < 2 || originais.length > 35) {
+    throw new Error('Não encontrei as imagens deste carrossel para preparar a versão do TikTok. Gere novamente este carrossel.');
+  }
+
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lbw-tiktok-feed-clean-'));
+  try {
+    const versao = Date.now();
+    const slidesLimpos = [];
+    for (const [indice, original] of originais.entries()) {
+      const entrada = path.join(temp, `entrada-${indice}.png`);
+      const saida = path.join(temp, `saida-${indice}.jpg`);
+      fs.writeFileSync(entrada, await baixarBytes(original));
+      // Mesma faixa do carrossel-video em arquivoVideoTikTok: cabeçalho de 96px
+      // no topo e rodapé de 128px na base, ambos trocados por fundo liso — as
+      // duas peças vêm do mesmo layout (render-carrossel.mjs).
+      await execFileAsync('ffmpeg', [
+        '-y', '-hide_banner', '-loglevel', 'error', '-i', entrada,
+        '-vf', 'crop=iw:ih-224:0:96,pad=iw:ih+224:0:96:color=0xF3F7FC',
+        '-q:v', '2', saida,
+      ], { timeout: 60 * 1000 });
+      const destino = `marketing/${peca.consultorId}/${peca.campanhaId}/tiktok/v${versao}/slide-${String(indice + 1).padStart(2, '0')}.jpg`;
+      await bucket().file(destino).save(fs.readFileSync(saida), { contentType: 'image/jpeg' });
+      slidesLimpos.push(destino);
+    }
+    await db().collection(COLECOES.pecas).doc(peca.id).set({ tiktokSlides: slidesLimpos }, { merge: true });
+    return slidesLimpos;
+  } finally {
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+}
+
+async function publicarCarrosselFotosTiktok(peca, legenda, token, criador, privacidade) {
+  const slides = await slidesLimposDoCarrosselTiktok(peca);
   const segredo = segredoDeMidiaTiktok();
   const urls = slides.map((slide) => urlPublicaDeMidiaTiktok(slide, segredo));
   const res = await fetch(`${TT_BASE}/post/publish/content/init/`, {

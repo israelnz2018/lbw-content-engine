@@ -15,6 +15,7 @@ import {
   escolherPrivacidadeTiktok,
   explicarRecusaTiktok,
   deveTentarCruzamentoDeNovo,
+  slidesLimposDoCarrosselTiktok,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -26,6 +27,11 @@ const conferir = (nome, ok, detalhe = '') => {
 
 const erroDe = (fn) => {
   try { fn(); return null; } catch (e) { return e.message; }
+};
+// slidesLimposDoCarrosselTiktok é async: um erro dela vira Promise rejeitada,
+// não exceção síncrona — erroDe() não pegaria. Versão irmã, só para ela.
+const erroDeAsync = async (fn) => {
+  try { await fn(); return null; } catch (e) { return e.message; }
 };
 
 /* ── Qual rede ───────────────────────────────────────────────── */
@@ -396,6 +402,26 @@ conferir('caso real: YouTube (falhou) entra no reenvio',
   deveTentarCruzamentoDeNovo(pecaReal.publicacao.youtube.status) === true);
 conferir('caso real: TikTok (falhou) entra no reenvio',
   deveTentarCruzamentoDeNovo(pecaReal.publicacao.tiktok.status) === true);
+
+/* ── Plano B do carrossel de fotos no TikTok ─────────────────── */
+/*
+ * O Israel achou uma peca que perdeu a versao TikTok depois de "Refazer":
+ * regerarPeca() nunca gerou a copia tiktokClean, so gerarCampanha() faz isso.
+ * Video (reel/carrossel-video) ja tinha plano B (arquivoVideoTikTok remove a
+ * marca na hora de publicar); carrossel de fotos so tinha um erro dizendo
+ * "gere de novo". Estes testes cobrem os caminhos SEM rede — o corte de
+ * verdade foi conferido a parte, com uma imagem sintetica.
+ */
+conferir('ja tem tiktokSlides valido: devolve na hora, sem gerar nada',
+  JSON.stringify(await slidesLimposDoCarrosselTiktok({
+    tiktokSlides: ['marketing/israel/c1/tiktok/v1/slide-01.jpg', 'marketing/israel/c1/tiktok/v1/slide-02.jpg'],
+  })) === JSON.stringify(['marketing/israel/c1/tiktok/v1/slide-01.jpg', 'marketing/israel/c1/tiktok/v1/slide-02.jpg']));
+
+conferir('peca enviada manualmente (sem original limpo): recusa com instrução clara',
+  (await erroDeAsync(() => slidesLimposDoCarrosselTiktok({ origem: 'enviada', arquivos: ['a.png', 'b.png'] }))) !== null);
+
+conferir('sem arquivos originais suficientes: recusa dizendo para gerar de novo',
+  (await erroDeAsync(() => slidesLimposDoCarrosselTiktok({ arquivos: ['marketing/x/slide-01.png'] }))) !== null);
 
 console.log(`\n${falhas === 0 ? 'TODOS OS TESTES PASSARAM' : `${falhas} TESTE(S) FALHARAM`}`);
 process.exit(falhas === 0 ? 0 : 1);
