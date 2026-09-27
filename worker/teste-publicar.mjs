@@ -13,6 +13,7 @@ import {
   deveCruzarParaFacebook, deveCruzarParaYoutube, deveCruzarParaTiktok, credenciaisFacebook,
   blocosDeUploadTiktok,
   escolherPrivacidadeTiktok,
+  explicarRecusaTiktok,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -84,6 +85,26 @@ conferir('TikTok auditado RECUSA publicar sem privacidade escolhida',
   erroDe(() => escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { auditada: true })) !== null);
 conferir('antes da auditoria, a falta de escolha nao trava (o TikTok obriga SELF_ONLY)',
   escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { auditada: false }) === 'SELF_ONLY');
+
+/* ── A recusa do TikTok vira instrucao, nao codigo em ingles ─── */
+/*
+ * O primeiro Reel real levou 403 com
+ * `unaudited_client_can_only_post_to_private_accounts`. O nome engana: o post
+ * JA era SELF_ONLY. O que falta e a CONTA inteira estar privada enquanto o app
+ * nao e auditado. Sem traduzir, o Israel le um codigo em ingles e um link.
+ */
+const recusaAuditoria = explicarRecusaTiktok(
+  '{"error":{"code":"unaudited_client_can_only_post_to_private_accounts","message":"Please review our integration guidelines"}}', 403,
+);
+conferir('a recusa por app nao auditado explica que a CONTA precisa estar privada',
+  recusaAuditoria.includes('privada') && recusaAuditoria.includes('auditoria')
+  && !recusaAuditoria.includes('unaudited_client'));
+
+conferir('limite diario vira instrucao em portugues',
+  explicarRecusaTiktok('{"error":{"code":"spam_risk_too_many_posts"}}', 403).includes('amanhã'));
+
+conferir('recusa desconhecida preserva o texto cru, para nao esconder o diagnostico',
+  explicarRecusaTiktok('{"error":{"code":"algo_novo_qualquer"}}', 500).includes('algo_novo_qualquer'));
 
 /* ── Trava da fase 1 ─────────────────────────────────────────── */
 conferir('israel publica', consultorLiberado('israel'));

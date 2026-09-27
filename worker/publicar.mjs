@@ -118,6 +118,41 @@ export function blocosDeUploadTiktok(tamanho) {
  * Antes da auditoria a história é outra: o TikTok obriga SELF_ONLY, então não
  * há o que escolher e a ausência de escolha não é problema.
  */
+/**
+ * Traduz a recusa do TikTok para algo que diga O QUE FAZER.
+ *
+ * O TikTok responde com um código em inglês e um link para as diretrizes. O
+ * mais provável aqui, e o que de fato apareceu no primeiro Reel real, é
+ * `unaudited_client_can_only_post_to_private_accounts` — e o nome engana: não
+ * basta o post ser SELF_ONLY (ele já era), a CONTA inteira do TikTok precisa
+ * estar como privada enquanto o app não passa pela auditoria. É regra deles.
+ *
+ * Exportada para ter teste próprio: aqui a mensagem é o produto.
+ */
+export function explicarRecusaTiktok(corpo, status) {
+  const texto = String(corpo || '');
+  if (texto.includes('unaudited_client_can_only_post_to_private_accounts')) {
+    return 'O TikTok recusou porque o aplicativo ainda não passou pela auditoria deles. '
+      + 'Enquanto isso, a CONTA do TikTok precisa estar como privada para receber '
+      + 'publicações pela API — não basta o post sair como "Somente você". '
+      + 'Deixe a conta privada no app do TikTok (Configurações → Privacidade) '
+      + 'ou espere a auditoria sair.';
+  }
+  if (texto.includes('spam_risk_too_many_posts')) {
+    return 'O TikTok recusou por limite de publicações no dia. Tente de novo amanhã.';
+  }
+  if (texto.includes('spam_risk_user_banned_from_posting')) {
+    return 'O TikTok bloqueou publicações desta conta. Verifique a conta no app do TikTok.';
+  }
+  if (texto.includes('url_ownership_unverified')) {
+    return 'O TikTok recusou as imagens porque o domínio não está verificado no aplicativo dele.';
+  }
+  if (texto.includes('privacy_level_option_mismatch')) {
+    return 'A privacidade escolhida não está disponível para esta conta do TikTok. Escolha outra ao agendar.';
+  }
+  return `TikTok recusou iniciar o envio (${status}): ${texto.slice(0, 400)}`;
+}
+
 export function escolherPrivacidadeTiktok(opcoes, { auditada = false, solicitada } = {}) {
   if (auditada && !solicitada) {
     throw new Error('Escolha quem pode ver esta publicação no TikTok antes de agendar — o TikTok não permite um valor padrão.');
@@ -650,7 +685,27 @@ async function tokenDeAcessoYoutube({ clientId, clientSecret, refreshToken }) {
     }),
   });
   const texto = await res.text();
-  if (!res.ok) throw new Error(`Google recusou renovar o acesso ao YouTube (${res.status}): ${texto.slice(0, 400)}`);
+  if (!res.ok) {
+    // `invalid_grant` tem uma causa concreta e recorrente aqui, e o texto cru
+    // do Google ("Token has been expired or revoked") não a revela: enquanto a
+    // tela de consentimento do projeto estiver com status "Testing", o Google
+    // EXPIRA o refresh token A CADA 7 DIAS. O YouTube então para de publicar
+    // sozinho, sem nada ter mudado no código — foi o que aconteceu em 26/09,
+    // sete dias depois da última autorização.
+    //
+    // Traduzir aqui é o que transforma "falhou" numa instrução: a correção
+    // definitiva é publicar a tela de consentimento (status "In production"),
+    // que remove o prazo.
+    if (texto.includes('invalid_grant')) {
+      throw new Error(
+        'A autorização do YouTube venceu. Isso acontece a cada 7 dias enquanto a tela '
+        + 'de consentimento do projeto no Google Cloud estiver como "Testing" — publique-a '
+        + '("In production") para o prazo deixar de existir. Depois, reautorize o YouTube '
+        + 'para voltar a publicar.',
+      );
+    }
+    throw new Error(`Google recusou renovar o acesso ao YouTube (${res.status}): ${texto.slice(0, 400)}`);
+  }
   return JSON.parse(texto).access_token;
 }
 
@@ -900,7 +955,7 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
     }),
   });
   const corpoInicio = await iniciar.text();
-  if (!iniciar.ok) throw new Error(`TikTok recusou iniciar o envio (${iniciar.status}): ${corpoInicio.slice(0, 400)}`);
+  if (!iniciar.ok) throw new Error(explicarRecusaTiktok(corpoInicio, iniciar.status));
   const dadosInicio = JSON.parse(corpoInicio);
   const uploadUrl = dadosInicio?.data?.upload_url;
   const publishId = dadosInicio?.data?.publish_id;
