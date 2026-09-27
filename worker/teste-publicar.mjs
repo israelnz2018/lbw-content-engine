@@ -14,6 +14,7 @@ import {
   blocosDeUploadTiktok,
   escolherPrivacidadeTiktok,
   explicarRecusaTiktok,
+  deveTentarCruzamentoDeNovo,
 } from './publicar.mjs';
 import { instanteDoAgendamento, estaNaHora, pecasDevidas, diaNoFuso, jaSaiu } from './agenda.mjs';
 
@@ -358,6 +359,43 @@ conferir('com Instagram no ar, Facebook e YouTube continuam sendo tentados',
   semFalha.chamadas.facebook === 1 && semFalha.chamadas.youtube === 1);
 conferir('caminho feliz devolve Instagram e TikTok juntos',
   semFalha.resultado.rede === 'instagram' && semFalha.resultado.tiktok.status === 'processando');
+
+/* ── Reenviar so os cruzamentos que falharam ─────────────────── */
+/*
+ * O Israel pediu isto depois de ver o Reel de hoje: Instagram e Facebook
+ * foram ao ar, YouTube e TikTok falharam (token vencido, conta publica — os
+ * dois ja corrigidos). "crie um botao para enviar novamente para todo
+ * criativo que por qualquer razao nao foi para as midias sociais".
+ *
+ * O risco que este recurso existe para evitar: reenviar uma rede que JA deu
+ * certo duplicaria o post. deveTentarCruzamentoDeNovo e a trava, isolada em
+ * funcao pura para nao depender de rede nem credencial no teste.
+ */
+conferir('rede ja publicada NAO tenta de novo — e a duplicacao que isto evita',
+  deveTentarCruzamentoDeNovo('publicada') === false);
+conferir('TikTok "processando" (assincrono) tambem NAO repete',
+  deveTentarCruzamentoDeNovo('processando') === false);
+conferir('rede que falhou TENTA de novo',
+  deveTentarCruzamentoDeNovo('falhou') === true);
+conferir('rede nunca tentada (undefined) TENTA agora',
+  deveTentarCruzamentoDeNovo(undefined) === true);
+
+// Reproduz o caso real do banco: Instagram+Facebook publicados, YouTube+TikTok
+// falhados. Confere que so os dois falhados seriam re-tentados.
+const pecaReal = {
+  publicacao: {
+    status: 'publicada', rede: 'instagram',
+    facebook: { status: 'publicada', link: 'https://www.facebook.com/reel/1089336866803904/' },
+    youtube: { status: 'falhou', erro: 'invalid_grant' },
+    tiktok: { status: 'falhou', erro: 'unaudited_client_can_only_post_to_private_accounts' },
+  },
+};
+conferir('caso real: Facebook (ja publicado) fica de fora do reenvio',
+  deveTentarCruzamentoDeNovo(pecaReal.publicacao.facebook.status) === false);
+conferir('caso real: YouTube (falhou) entra no reenvio',
+  deveTentarCruzamentoDeNovo(pecaReal.publicacao.youtube.status) === true);
+conferir('caso real: TikTok (falhou) entra no reenvio',
+  deveTentarCruzamentoDeNovo(pecaReal.publicacao.tiktok.status) === true);
 
 console.log(`\n${falhas === 0 ? 'TODOS OS TESTES PASSARAM' : `${falhas} TESTE(S) FALHARAM`}`);
 process.exit(falhas === 0 ? 0 : 1);

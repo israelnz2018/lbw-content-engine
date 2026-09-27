@@ -19,7 +19,7 @@ import {
 import {
   resolverImagensDoRender, imagensPorPagina, registrarUso, prepararImagem as prepararImagemDaBiblioteca,
 } from './imagens.mjs';
-import { publicarPeca, redeDaPeca } from './publicar.mjs';
+import { publicarPeca, redeDaPeca, reenviarCruzamentosQueFalharam, legendaDaPeca } from './publicar.mjs';
 import { jaSaiu } from './agenda.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -942,6 +942,43 @@ export async function publicar(tarefa) {
   }
 }
 
+/**
+ * Reenvia só os cruzamentos (Facebook/YouTube/TikTok) que não deram certo numa
+ * peça cuja rede principal JÁ foi ao ar. Ver reenviarCruzamentosQueFalharam em
+ * publicar.mjs para a trava que impede duplicar uma rede que já publicou.
+ *
+ * Tarefa própria, e não a mesma 'publicar': misturar as duas faria este botão
+ * reprovar peças que ainda nem tentaram sair (a trava de 'publicar' espera
+ * status 'publicando' vindo da MESMA tarefa), e faria 'publicar' aceitar
+ * peças já publicadas sem querer.
+ */
+export async function retentarCruzamentos(tarefa) {
+  const peca = await lerPeca(tarefa.pecaId);
+  if (!peca) throw new Error(`Peça ${tarefa.pecaId} não existe.`);
+  if (!jaSaiu(peca)) {
+    throw new Error('Esta peça ainda não foi publicada na rede principal — use "Publicar agora" em vez de reenviar.');
+  }
+
+  const legenda = await legendaDaPeca(peca);
+  const { facebook, youtube, tiktok } = await reenviarCruzamentosQueFalharam(peca, legenda);
+  await gravarPeca({
+    id: peca.id,
+    publicacao: {
+      ...(peca.publicacao || {}),
+      ...(facebook ? { facebook } : {}),
+      ...(youtube ? { youtube } : {}),
+      ...(tiktok ? { tiktok } : {}),
+    },
+  });
+  return {
+    pecaId: peca.id,
+    facebook: facebook?.status,
+    youtube: youtube?.status,
+    tiktok: tiktok?.status,
+    nadaParaReenviar: !facebook && !youtube && !tiktok,
+  };
+}
+
 export const EXECUTORES = {
   'gerar-campanha': gerarCampanha,
   'regerar-peca': regerarPeca,
@@ -949,4 +986,5 @@ export const EXECUTORES = {
   'gerar-capa': gerarCapa,
   'preparar-imagem': prepararImagem,
   'publicar': publicar,
+  'retentar-cruzamentos': retentarCruzamentos,
 };

@@ -1192,3 +1192,58 @@ export async function publicarPeca(pecaOuId) {
 
   return resultado;
 }
+
+/**
+ * Reenvia só os CRUZAMENTOS que faltaram — Facebook, YouTube, TikTok — sem
+ * tocar na rede principal (Instagram/LinkedIn).
+ *
+ * O Israel pediu isto depois de ver um Reel que tinha ido ao ar no Instagram e
+ * no Facebook, mas falhado no YouTube (token vencido, corrigido) e no TikTok
+ * (conta pública, corrigido): "crie um botão para enviar novamente para todo
+ * criativo que por qualquer razão não foi para as mídias sociais".
+ *
+ * A REGRA QUE PROTEGE CONTRA DUPLICAR: cada rede só é tentada se ELA MESMA
+ * ainda não tiver dado certo. Chamar cruzarParaFacebookSeConfigurado() de novo
+ * numa peça cujo Facebook já é 'publicada' publicaria um SEGUNDO post — a
+ * função em si não sabe que já rodou antes, quem sabe é quem chama. Por isso a
+ * trava mora aqui, olhando o `publicacao` atual da peça, e não dentro de cada
+ * cruzarPara*SeConfigurado (que o publicarPeca original também usa, sempre na
+ * primeira tentativa, quando nada disso ainda existe).
+ *
+ * TikTok tem um terceiro estado que os outros não têm: 'processando' (a
+ * publicação é assíncrona lá). Também não repete nesse estado — reenviar um
+ * vídeo que já está na fila deles duplicaria o post assim que o
+ * verificarPublicacoesTiktok confirmasse os dois.
+ */
+/**
+ * A trava propriamente dita, separada em função pura para ter teste próprio
+ * sem precisar de rede nem credencial: dado o status ATUAL de uma rede
+ * (facebook/youtube/tiktok), diz se vale a pena tentar de novo.
+ *
+ * 'publicada' nunca repete — é a duplicação que este recurso inteiro existe
+ * para evitar. 'processando' também não, só para o TikTok: a publicação lá é
+ * assíncrona, e reenviar um vídeo que já está na fila deles duplicaria o post
+ * assim que verificarPublicacoesTiktok confirmasse os dois.
+ */
+export function deveTentarCruzamentoDeNovo(statusAtual) {
+  return statusAtual !== 'publicada' && statusAtual !== 'processando';
+}
+
+export async function reenviarCruzamentosQueFalharam(peca, legenda) {
+  const atual = peca.publicacao || {};
+  const resultado = {};
+
+  if (deveTentarCruzamentoDeNovo(atual.facebook?.status)) {
+    const facebook = await cruzarParaFacebookSeConfigurado(peca, legenda);
+    if (facebook) resultado.facebook = facebook;
+  }
+  if (deveTentarCruzamentoDeNovo(atual.youtube?.status)) {
+    const youtube = await cruzarParaYoutubeSeConfigurado(peca, legenda);
+    if (youtube) resultado.youtube = youtube;
+  }
+  if (deveTentarCruzamentoDeNovo(atual.tiktok?.status)) {
+    const tiktok = await cruzarParaTiktokSeConfigurado(peca, legenda);
+    if (tiktok) resultado.tiktok = tiktok;
+  }
+  return resultado;
+}
