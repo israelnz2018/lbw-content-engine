@@ -41,23 +41,38 @@ conferir('ANTES o mesmo recorte seria espremido em ~15%',
   Math.abs((PROPORCAO_ALVO / (435 / 390)) - 1) > 0.13);
 
 /* ── 2. Nitidez: crescer em vez de esticar ───────────────────── */
-const base = { width: 435, height: 390 };
-conferir('o recorte CRESCE para caber na proporcao, nunca encolhe o rosto',
-  r.width >= base.width && r.height >= base.height,
-  `${r.width}x${r.height} vs base ${base.width}x${base.height}`);
-
 // dSF=1 e MEDIDO, nao chutado: em dSF=2 a area interna exigiria 1748x1848 px,
-// e um Full HD so tem 436px de rosto — a ampliacao subiria de 2,00x para 4,01x.
-// Resolucao de saida nao cria detalhe que a camera nao capturou.
+// e um Full HD so tem 436px de rosto — a ampliacao dobraria. Resolucao de
+// saida nao cria detalhe que a camera nao capturou.
 conferir('a saida sai no tamanho exato da moldura, sem desperdicio nos dois sentidos',
   r.saidaLargura === MOLDURA_CAPA.largura && r.saidaAltura === MOLDURA_CAPA.altura);
 
-// O ganho real que o Israel vai ver: menos ampliacao que antes.
-const amplAntes = 2.79;  // 2,07x no ffmpeg x 1,35x no CSS
+/* ── 2b. O ENQUADRAMENTO: o defeito que eu mesmo causei ──────── */
+/*
+ * Eu removi o `transform: scale(1.35)` do CSS achando que era so um zoom ruim.
+ * Era TAMBEM o enquadramento: aproximava o rosto ate sangrar nas bordas da
+ * moldura, e o overflow:hidden cortava o excesso. Sem ele, o retrato passou a
+ * encaixar justo e apareceu fundo de sala em volta do rosto — o Israel recusou:
+ * "nao pode ficar espaco entre minha imagem e circulo".
+ *
+ * Estas assercoes travam o enquadramento para ninguem repetir o erro.
+ */
+const janelaSemAproximar = 436 * 460;   // o que seria sem APROXIMACAO_DO_ROSTO
+const janelaAgora = r.width * r.height;
+conferir('a janela de recorte e MENOR que a moldura inteira (o rosto e aproximado)',
+  janelaAgora < janelaSemAproximar,
+  `${janelaAgora} vs ${janelaSemAproximar} — se nao for menor, sobra fundo no circulo`);
+
+const aproximacaoEfetiva = Math.sqrt(janelaSemAproximar / janelaAgora);
+conferir('a aproximacao bate com o 1,35x das capas aprovadas',
+  Math.abs(aproximacaoEfetiva - 1.35) < 0.03,
+  `aproximacao ${aproximacaoEfetiva.toFixed(3)}x`);
+
+// O ganho que sobrevive: mesma aproximacao de antes, SEM os 15% de deformacao.
 const amplAgora = MOLDURA_CAPA.largura / r.width;
-conferir('a ampliacao do rosto CAI em relacao ao que era antes',
-  amplAgora < amplAntes, `agora ${amplAgora.toFixed(2)}x vs antes ${amplAntes}x`);
-console.log(`     (ampliacao em Full HD: ${amplAntes}x -> ${amplAgora.toFixed(2)}x)`);
+conferir('a ampliacao NAO piora em relacao as capas aprovadas (2,79x em Full HD)',
+  amplAgora <= 2.85, `agora ${amplAgora.toFixed(2)}x`);
+console.log(`     (Full HD: ${amplAgora.toFixed(2)}x, igual ao aprovado — mas sem espremer 15%)`);
 
 /* ── 3. Centro preservado: a posicao estavel ─────────────────── */
 const centroBaseX = (recorteReal.x * 1.5) + (recorteReal.width * 1.5) / 2;
@@ -100,12 +115,27 @@ for (const fonte of [
 conferir('largura e altura pares (o ffmpeg recusa impares em varios codecs)',
   r.width % 2 === 0 && r.height % 2 === 0 && r.x % 2 === 0 && r.y % 2 === 0);
 
-/* ── 7. Ganho real de pixels, medido ─────────────────────────── */
-const pixelsAntes = 435 * 390;
-const pixelsAgora = r.width * r.height;
-conferir('usa MAIS pixels reais do video do que antes',
-  pixelsAgora > pixelsAntes,
-  `${pixelsAgora} vs ${pixelsAntes}`);
-console.log(`     (${(pixelsAgora / pixelsAntes).toFixed(2)}x mais pixels reais aproveitados)`);
+/* ── 7. O que de fato melhorou, medido ───────────────────────── */
+/*
+ * NAO se mede isto por "quantidade de pixels do recorte": a janela agora e
+ * MENOR de proposito, porque o enquadramento aproxima o rosto (ver 2b). Uma
+ * assercao de "mais pixels" existia aqui e passou a falhar quando restaurei o
+ * enquadramento — ela media a coisa errada.
+ *
+ * O ganho real e a PROPORCAO: mesma aproximacao das capas aprovadas, sem os
+ * 15% de aperto horizontal. Um rosto quadrado sai quadrado.
+ */
+const fatorLargura = MOLDURA_CAPA.largura / r.width;
+const fatorAltura = MOLDURA_CAPA.altura / r.height;
+conferir('os dois eixos sao ampliados IGUALMENTE (era isso que deformava)',
+  Math.abs(fatorLargura - fatorAltura) / fatorLargura < 0.01,
+  `largura ${fatorLargura.toFixed(3)}x vs altura ${fatorAltura.toFixed(3)}x`);
+
+// O caminho antigo: crop 436x390 -> 900x950. Um rosto quadrado virava retangulo.
+const deformacaoAntiga = (950 / 390) / (900 / 436);
+conferir('ANTES os eixos eram ampliados em proporcoes diferentes (18% de erro)',
+  Math.abs(deformacaoAntiga - 1) > 0.15,
+  `${((deformacaoAntiga - 1) * 100).toFixed(1)}% de deformacao no caminho antigo`);
+console.log(`     (rosto quadrado: antes saia esticado ${((deformacaoAntiga - 1) * 100).toFixed(0)}%, agora sai quadrado)`);
 
 console.log(`\n${process.exitCode ? 'FALHOU' : `TODOS OS ${passaram} TESTES PASSARAM`}`);

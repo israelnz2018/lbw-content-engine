@@ -83,16 +83,16 @@ const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><sty
 .hook{position:relative;z-index:3;width:960px;margin-top:27px;font-weight:950;font-style:italic;text-transform:uppercase;letter-spacing:-4.5px;line-height:.91}.hook .line{display:block;font-size:104px;overflow-wrap:anywhere}.hook .line:first-child{color:${palette.accent}}.hook .line:not(:first-child){color:${palette.ink}}
 .rule{position:absolute;left:0;top:515px;width:610px;height:14px;border-radius:10px;background:${palette.highlight};z-index:3}
 .portrait-shell{position:absolute;z-index:2;right:-40px;bottom:0;width:900px;height:950px;border-radius:52% 48% 10% 10% / 54% 54% 10% 10%;overflow:hidden;background:#EAF1FA;border:13px solid ${palette.ink};box-shadow:0 27px 0 ${palette.highlight}}
-/* O retrato JA CHEGA recortado na proporcao desta moldura (ver
-   recorteDoRetratoDaCapa, no worker). Por isso aqui nao ha mais
-   transform:scale(1.35) nem object-position:center 34%.
-   Os dois brigavam entre si: o 34% escolhia um ponto do rosto e o scale, que
-   amplia a partir do CENTRO do elemento, empurrava tudo de novo — por isso o
-   rosto caia num lugar diferente a cada video. E o scale ainda ampliava 1,35x
-   uma imagem que ja vinha esticada, somando 2,79x de ampliacao sobre um
-   recorte de 435x390 pixels: era dai que vinha o borrao.
+/* O retrato JA CHEGA recortado na proporcao desta moldura E ja enquadrado
+   para preenche-la (ver recorteDoRetratoDaCapa, no worker).
+   Por isso aqui nao ha mais transform:scale(1.35) nem object-position:34%.
+   ATENCAO ao mexer: o scale(1.35) fazia DUAS coisas — ampliava (mal, borrando)
+   e ENQUADRAVA, aproximando o rosto ate sangrar nas bordas. Remover so o zoom
+   deixou sobrar fundo de sala dentro do circulo, e a capa foi recusada. O
+   enquadramento continua existindo, agora no recorte do ffmpeg, onde le pixel
+   de verdade do video em vez de ampliar uma imagem pronta.
    object-fit:cover com center continua, como rede de seguranca para a borda
-   de 13px que come area interna; com a proporcao certa, ele agora corta
+   de 13px que come area interna; com a proporcao certa, ele corta
    pouquissimo, e sempre igual nos dois lados. */
 .portrait-shell img{width:100%;height:100%;object-fit:cover;object-position:center}
 .topic{position:absolute;z-index:4;left:0;bottom:105px;width:400px;padding:23px 25px;border-radius:17px;color:#fff;background:${palette.ink};font-size:29px;line-height:1.07;font-weight:900;text-transform:uppercase}.topic strong{display:block;margin-top:6px;color:${palette.highlight};font-size:39px}

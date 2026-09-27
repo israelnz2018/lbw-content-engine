@@ -93,28 +93,42 @@ function ajustarCropParaResolucao(crop, dimensoes) {
 export const MOLDURA_CAPA = { largura: 900, altura: 950 };
 
 /**
- * Alarga o recorte do rosto até a proporção da moldura da capa, mantendo o
- * mesmo centro, e devolve também a escala de saída.
+ * O quanto o rosto é aproximado para preencher a moldura.
  *
- * O recorte que vem do Reel (290x260 em coordenadas 1280x720) foi pensado para
- * a janelinha da câmera NO VÍDEO — é quase quadrado. A moldura da capa é alta
- * (900x950). Antes o ffmpeg recebia `scale=900:950` direto sobre esse recorte,
- * e `scale` não preserva proporção: ESPREMIA o rosto em 15% na horizontal, além
- * de ampliar 2,07x um recorte de 435x390 pixels. Depois o CSS ainda aplicava
- * `transform: scale(1.35)` por cima, chegando a 2,79x de ampliação — o borrão.
+ * Este número TEM DE EXISTIR, e descobri isso quebrando a capa. O CSS tinha
+ * `transform: scale(1.35)` e eu o removi achando que era só um zoom ruim —
+ * era, mas era TAMBÉM o enquadramento: ele aproximava o rosto até sangrar nas
+ * bordas, e o `overflow: hidden` cortava o excesso. Sem ele, o retrato passou a
+ * encaixar justo na moldura e apareceu fundo de sala em volta do rosto: o
+ * "espaço entre a imagem e o círculo" que o Israel recusou.
  *
- * Aqui o recorte cresce ATÉ a proporção certa em vez de o rosto ser esticado
- * até ela: pega mais pixels que já existem no vídeo, de graça e nítidos. Só
- * encolhe se esbarrar na borda do quadro, e então corrige o outro lado para a
- * proporção nunca sair errada — é essa garantia que substitui o `scale` do CSS.
+ * 1.35 reproduz exatamente o enquadramento aprovado das capas antigas. A
+ * diferença é ONDE ele acontece: no recorte do ffmpeg, que lê pixels de
+ * verdade do vídeo, em vez de no CSS, que ampliava uma imagem já pronta.
+ */
+const APROXIMACAO_DO_ROSTO = 1.35;
+
+/**
+ * Recorta o rosto na proporção da moldura da capa E já enquadrado para
+ * preenchê-la, mantendo o mesmo centro.
  *
- * A saída sai no tamanho EXATO da moldura (900x950), e não maior: a capa é
- * renderizada com deviceScaleFactor 1, então entregar mais que isso só faria o
- * navegador reamostrar para baixo — trabalho jogado fora. E entregar menos
- * obrigaria o navegador a ampliar, que é pior que o ffmpeg com lanczos.
+ * Duas coisas estavam erradas no caminho antigo, e a correção de uma não pode
+ * desfazer a outra:
  *
- * Medido: em Full HD a ampliação cai de 2,79x (o scale CSS de 1,35x sobre um
- * recorte já esticado 2,07x) para 2,00x. Em 4K, para 1,00x — nenhuma.
+ * 1. O recorte do Reel (290x260 em 1280x720) é quase quadrado — pensado para a
+ *    janelinha da câmera NO VÍDEO. A moldura da capa é alta (900x950). O ffmpeg
+ *    recebia `scale=900:950` direto, e `scale` não preserva proporção:
+ *    ESPREMIA o rosto em 15%. Aqui o recorte CRESCE até a proporção certa em
+ *    vez de o rosto ser esticado até ela.
+ *
+ * 2. O enquadramento (APROXIMACAO_DO_ROSTO) precisa continuar existindo, senão
+ *    sobra fundo dentro do círculo. Ele agora é feito ENCOLHENDO A JANELA DE
+ *    RECORTE — pegar menos área do vídeo e ampliá-la com lanczos é o mesmo
+ *    enquadramento com muito menos perda do que o zoom do CSS fazia.
+ *
+ * A saída sai no tamanho EXATO da moldura (900x950): a capa é renderizada com
+ * deviceScaleFactor 1, então entregar mais só faria o navegador reamostrar para
+ * baixo, e entregar menos o obrigaria a ampliar — pior que o ffmpeg.
  */
 export function recorteDoRetratoDaCapa(crop, dimensoes) {
   const base = ajustarCropParaResolucao(crop, dimensoes);
@@ -128,6 +142,11 @@ export function recorteDoRetratoDaCapa(crop, dimensoes) {
   let altura = base.height;
   if (largura / altura > proporcaoAlvo) altura = largura / proporcaoAlvo;
   else largura = altura * proporcaoAlvo;
+
+  // O enquadramento: janela menor = rosto maior na capa. É o que o scale(1.35)
+  // do CSS fazia, movido para cá — mesma aproximação, sem ampliar bitmap pronto.
+  largura /= APROXIMACAO_DO_ROSTO;
+  altura /= APROXIMACAO_DO_ROSTO;
 
   // O quadro é o limite. Se não couber, encolhe MANTENDO a proporção — os dois
   // lados juntos, senão voltaríamos a deformar pelo outro caminho.
