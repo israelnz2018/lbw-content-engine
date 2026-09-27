@@ -105,9 +105,24 @@ export function blocosDeUploadTiktok(tamanho) {
   return { tamanhoBloco, quantidade, blocos };
 }
 
-/** Unaudited/Sandbox apps must never request a public TikTok post. */
+/**
+ * A privacidade do post, e ela NUNCA é escolhida por nós quando o app já passou
+ * pela auditoria.
+ *
+ * O TikTok proíbe valor padrão: "users must manually select the privacy status
+ * from a dropdown and there should be no default value". A tela já obriga a
+ * escolha, mas a trava precisa existir aqui também — antes, uma peça sem
+ * escolha cairia em PUBLIC_TO_EVERYONE sozinha assim que a auditoria saísse, e
+ * um vídeo iria a público sem ninguém ter decidido isso.
+ *
+ * Antes da auditoria a história é outra: o TikTok obriga SELF_ONLY, então não
+ * há o que escolher e a ausência de escolha não é problema.
+ */
 export function escolherPrivacidadeTiktok(opcoes, { auditada = false, solicitada } = {}) {
-  const escolhida = auditada ? (solicitada || 'PUBLIC_TO_EVERYONE') : 'SELF_ONLY';
+  if (auditada && !solicitada) {
+    throw new Error('Escolha quem pode ver esta publicação no TikTok antes de agendar — o TikTok não permite um valor padrão.');
+  }
+  const escolhida = auditada ? solicitada : 'SELF_ONLY';
   if (!Array.isArray(opcoes) || !opcoes.includes(escolhida)) {
     throw new Error(`A privacidade '${escolhida}' não está disponível para esta conta TikTok.`);
   }

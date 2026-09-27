@@ -77,6 +77,13 @@ conferir('TikTok auditado respeita privacidade escolhida disponível',
   escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { auditada: true, solicitada: 'PUBLIC_TO_EVERYONE' }) === 'PUBLIC_TO_EVERYONE');
 conferir('TikTok rejeita privacidade ausente nas opções do criador',
   erroDe(() => escolherPrivacidadeTiktok(['SELF_ONLY'], { auditada: true, solicitada: 'PUBLIC_TO_EVERYONE' })) !== null);
+// O TikTok proibe valor padrao: "there should be no default value". Sem esta
+// trava, uma peca sem escolha iria a PUBLICO sozinha no dia em que a auditoria
+// saisse — ninguem teria decidido isso.
+conferir('TikTok auditado RECUSA publicar sem privacidade escolhida',
+  erroDe(() => escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { auditada: true })) !== null);
+conferir('antes da auditoria, a falta de escolha nao trava (o TikTok obriga SELF_ONLY)',
+  escolherPrivacidadeTiktok(['SELF_ONLY', 'PUBLIC_TO_EVERYONE'], { auditada: false }) === 'SELF_ONLY');
 
 /* ── Trava da fase 1 ─────────────────────────────────────────── */
 conferir('israel publica', consultorLiberado('israel'));
