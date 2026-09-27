@@ -973,7 +973,6 @@ async function publicarCarrosselFotosTiktok(peca, legenda, token, criador, priva
 async function publicarNoTiktok(peca, legenda, credenciais) {
   const token = await tokenDeAcessoTiktok(credenciais);
   const criador = await consultarCriadorTiktok(token);
-  const bytes = await arquivoVideoTikTok(peca);
 
   // A variável da auditoria só pode ser ligada depois da aprovação do app;
   // Sandbox e apps ainda não auditados são sempre SELF_ONLY.
@@ -984,12 +983,22 @@ async function publicarNoTiktok(peca, legenda, credenciais) {
   if (peca.tiktokBrandedContent === true && privacidade === 'SELF_ONLY') {
     throw new Error('O TikTok não permite conteúdo patrocinado de terceiros com visibilidade “Somente você”. Escolha outra privacidade após a auditoria.');
   }
+
+  // O CARROSSEL DE FOTOS SAI ANTES DE QUALQUER COISA DE VÍDEO.
+  //
+  // arquivoVideoTikTok() ficava logo no começo da função, antes deste desvio.
+  // Numa peça de fotos ele procurava um vídeo que não existe e morria com
+  // "Peça sem vídeo para o TikTok" — o caminho das fotos, logo abaixo, nunca
+  // era alcançado. Foi exatamente o que aconteceu no carrossel de 03:13: o
+  // plano B das imagens limpas estava pronto e nunca chegou a ser chamado.
   if (peca.tipo === 'carrossel-feed') {
     return publicarCarrosselFotosTiktok(peca, legenda, token, criador, privacidade);
   }
+
   if (peca.tiktokMusicUsageConfirmed !== true) {
     throw new Error('Confirme na etapa Publicação que você tem direito de usar o áudio e aceita a confirmação de música do TikTok.');
   }
+  const bytes = await arquivoVideoTikTok(peca);
   const titulo = limitarLegenda(legenda, 2200);
   const blocos = blocosDeUploadTiktok(bytes.length);
 
