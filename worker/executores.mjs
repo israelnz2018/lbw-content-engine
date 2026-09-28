@@ -22,6 +22,7 @@ import {
 import { publicarPeca, redeDaPeca, reenviarCruzamentosQueFalharam, legendaDaPeca } from './publicar.mjs';
 import { extrairRetrato } from './retrato.mjs';
 import { jaSaiu } from './agenda.mjs';
+import { gerarBrollLaboratorio } from './laboratorio.mjs';
 
 const execFileAsync = promisify(execFile);
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -912,4 +913,5 @@ export const EXECUTORES = {
   'preparar-imagem': prepararImagem,
   'publicar': publicar,
   'retentar-cruzamentos': retentarCruzamentos,
+  'laboratorio-broll': gerarBrollLaboratorio,
 };
