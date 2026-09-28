@@ -193,6 +193,32 @@ const setpts = velocidade === 1 ? 'setpts=PTS-STARTPTS' : `setpts=(PTS-STARTPTS)
 const filtrosTitulo = arquivosTitulo.map((arquivo, i) =>
   `drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivo)}':fontcolor=${i === 0 ? '0x0757FF' : '0x062B61'}:fontsize=${tituloAjustado.fonte}:x=(w-text_w)/2:y=${tituloAjustado.posicoesY[i]}:expansion=none`,
 ).join(',');
+
+// B-ROLL, OPCIONAL (hoje só o Laboratório pede). Sem config.brolls nada muda:
+// baseTitulo continua 'tmp2' e o filtro sai literalmente o de antes.
+//
+// A imagem cobre do fim da faixa do título (BANDA_BASE do ajustar-titulo) até o
+// pé da tela: título e legenda ficam por cima, a voz continua por baixo. O tempo
+// de cada B-roll já vem contado no vídeo QUE SAI, depois da velocidade.
+const BROLL_Y = 322;
+const BROLL_ALTURA = 1920 - BROLL_Y;
+const brolls = (Array.isArray(config.brolls) ? config.brolls : [])
+  .map((b) => ({ arquivo: resolverEntrada(b.path, 'B-roll'), inicio: Number(b.inicio), duracao: Number(b.duracao) }))
+  .filter((b) => b.inicio >= 0 && b.duracao > 0 && b.inicio < duracaoSaidaSegundos);
+const primeiraEntradaBroll = logo ? 2 : 1;
+const filtrosBroll = [];
+let baseTitulo = 'tmp2';
+brolls.forEach((b, n) => {
+  const ini = b.inicio.toFixed(3);
+  const fim = Math.min(b.inicio + b.duracao, duracaoSaidaSegundos).toFixed(3);
+  filtrosBroll.push(
+    `[${primeiraEntradaBroll + n}:v]trim=duration=${(fim - ini).toFixed(3)},setpts=PTS-STARTPTS+${ini}/TB,`
+      + `scale=1080:1920,crop=1080:${BROLL_ALTURA}:0:(ih-${BROLL_ALTURA})/2[br${n}]`,
+    `[${baseTitulo}][br${n}]overlay=0:${BROLL_Y}:eof_action=pass:enable='between(t,${ini},${fim})'[brc${n}]`,
+  );
+  baseTitulo = `brc${n}`;
+});
+
 const filtro = [
   // NAO REMOVER o setpts=PTS-STARTPTS das duas ramificacoes abaixo.
   // O filtro color gera o fundo a partir do tempo zero, mas a fonte entra com -ss antes
@@ -207,10 +233,11 @@ const filtro = [
   `[canvas][top]overlay=${L.slideX}:${L.slideY}[tmp1]`,
   `[tmp1]drawbox=x=${L.coverX}:y=${L.coverY}:w=${L.coverWidth}:h=${L.coverHeight}:color=${L.coverColor}:t=fill,drawbox=x=${L.slideX}:y=${L.slideBarY}:w=${L.slideWidth}:h=${L.slideBarHeight}:color=0x202D70:t=fill[tmpclean]`,
   `[tmpclean][face]overlay=${L.faceX}:${L.faceY}[tmp2]`,
+  ...filtrosBroll,
   ...(TIKTOK_CLEAN
-    ? [`[tmp2]${filtrosTitulo},subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`]
+    ? [`[${baseTitulo}]${filtrosTitulo},subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`]
     : [
-      `[tmp2]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head]`,
+      `[${baseTitulo}]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head]`,
       `[1:v]scale=60:60[logo]`,
       `[head][logo]overlay=40:20[branded]`,
       `[branded]drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoMarca)}':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,`
@@ -232,6 +259,7 @@ const argumentos = [
   ...(cabecalhos ? ['-headers', cabecalhos] : []),
   '-ss', paraTempoFfmpeg(inicioMs), '-t', String(duracaoSegundos), '-i', fonteVideo,
   ...(logo ? ['-loop', '1', '-i', logo] : []),
+  ...brolls.flatMap((b) => ['-i', b.arquivo]),
   '-filter_complex', filtro,
   '-map', '[outv]', '-map', '0:a:0?',
   '-t', String(duracaoSaidaSegundos),
