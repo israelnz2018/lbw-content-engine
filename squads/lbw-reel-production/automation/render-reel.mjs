@@ -194,30 +194,32 @@ const filtrosTitulo = arquivosTitulo.map((arquivo, i) =>
   `drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivo)}':fontcolor=${i === 0 ? '0x0757FF' : '0x062B61'}:fontsize=${tituloAjustado.fonte}:x=(w-text_w)/2:y=${tituloAjustado.posicoesY[i]}:expansion=none`,
 ).join(',');
 
-// B-ROLL, OPCIONAL (hoje só o Laboratório pede). Sem config.brolls nada muda:
-// baseTitulo continua 'tmp2' e o filtro sai literalmente o de antes.
+// B-ROLL, OPCIONAL (hoje só o Laboratório pede). Em TELA CHEIA: cobre o slide, o
+// rosto, a faixa da marca e o título; só a legenda fica por cima, e a voz continua.
+// O tempo de cada B-roll já vem contado no vídeo QUE SAI, depois da velocidade.
 //
-// A imagem cobre do fim da faixa do título (BANDA_BASE do ajustar-titulo) até o
-// pé da tela: título e legenda ficam por cima, a voz continua por baixo. O tempo
-// de cada B-roll já vem contado no vídeo QUE SAI, depois da velocidade.
-const BROLL_Y = 322;
-const BROLL_ALTURA = 1920 - BROLL_Y;
+// Sem config.brolls o filtro sai literalmente o de antes: o título e a legenda
+// fecham juntos em [outv]. Com B-roll, o título fecha em [marca], os B-rolls
+// entram por cima e a legenda vem por último.
 const brolls = (Array.isArray(config.brolls) ? config.brolls : [])
   .map((b) => ({ arquivo: resolverEntrada(b.path, 'B-roll'), inicio: Number(b.inicio), duracao: Number(b.duracao) }))
   .filter((b) => b.inicio >= 0 && b.duracao > 0 && b.inicio < duracaoSaidaSegundos);
 const primeiraEntradaBroll = logo ? 2 : 1;
+const legenda = `subtitles='${caminhoParaFiltro(legendaAss)}'`;
+const fimDoTitulo = brolls.length ? '[marca]' : `,${legenda}[outv]`;
 const filtrosBroll = [];
-let baseTitulo = 'tmp2';
+let baseBroll = 'marca';
 brolls.forEach((b, n) => {
   const ini = b.inicio.toFixed(3);
   const fim = Math.min(b.inicio + b.duracao, duracaoSaidaSegundos).toFixed(3);
   filtrosBroll.push(
     `[${primeiraEntradaBroll + n}:v]trim=duration=${(fim - ini).toFixed(3)},setpts=PTS-STARTPTS+${ini}/TB,`
-      + `scale=1080:1920,crop=1080:${BROLL_ALTURA}:0:(ih-${BROLL_ALTURA})/2[br${n}]`,
-    `[${baseTitulo}][br${n}]overlay=0:${BROLL_Y}:eof_action=pass:enable='between(t,${ini},${fim})'[brc${n}]`,
+      + `scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[br${n}]`,
+    `[${baseBroll}][br${n}]overlay=0:0:eof_action=pass:enable='between(t,${ini},${fim})'[brc${n}]`,
   );
-  baseTitulo = `brc${n}`;
+  baseBroll = `brc${n}`;
 });
+if (brolls.length) filtrosBroll.push(`[${baseBroll}]${legenda}[outv]`);
 
 const filtro = [
   // NAO REMOVER o setpts=PTS-STARTPTS das duas ramificacoes abaixo.
@@ -233,16 +235,16 @@ const filtro = [
   `[canvas][top]overlay=${L.slideX}:${L.slideY}[tmp1]`,
   `[tmp1]drawbox=x=${L.coverX}:y=${L.coverY}:w=${L.coverWidth}:h=${L.coverHeight}:color=${L.coverColor}:t=fill,drawbox=x=${L.slideX}:y=${L.slideBarY}:w=${L.slideWidth}:h=${L.slideBarHeight}:color=0x202D70:t=fill[tmpclean]`,
   `[tmpclean][face]overlay=${L.faceX}:${L.faceY}[tmp2]`,
-  ...filtrosBroll,
   ...(TIKTOK_CLEAN
-    ? [`[${baseTitulo}]${filtrosTitulo},subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`]
+    ? [`[tmp2]${filtrosTitulo}${fimDoTitulo}`]
     : [
-      `[${baseTitulo}]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head]`,
+      `[tmp2]drawbox=x=0:y=0:w=1080:h=105:color=0x062B61:t=fill[head]`,
       `[1:v]scale=60:60[logo]`,
       `[head][logo]overlay=40:20[branded]`,
       `[branded]drawtext=fontfile='${f}':textfile='${caminhoParaFiltro(arquivoMarca)}':fontcolor=white:fontsize=33:x=120:y=36:expansion=none,`
-        + `${filtrosTitulo},subtitles='${caminhoParaFiltro(legendaAss)}'[outv]`,
+        + `${filtrosTitulo}${fimDoTitulo}`,
     ]),
+  ...filtrosBroll,
 ].join(';\n');
 
 /* ── Render ────────────────────────────────────────────────── */
